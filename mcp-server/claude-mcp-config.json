@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "emotion-analysis": {
+      "command": "node",
+      "args": ["/home/mkykr/emotion-analysis-mcp/mcp-server/dist/server.js"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}

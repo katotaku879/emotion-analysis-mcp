@@ -1,0 +1,33 @@
+{
+  "name": "emotion-analysis-mcp",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "ts-node test-db.ts",
+    "build": "tsc",
+    "start": "node dist/test-db.js",
+    "migrate:emotion-logs": "node migration/migrate-emotion-logs.js",
+    "migrate:dry-run": "node migration/migrate-emotion-logs.js --dry-run",
+    "migrate:test": "node -e \"console.log('Migration test - files exist:', require('fs').existsSync('./migration/migrate-emotion-logs.js'))\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "dotenv": "^17.2.1",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "@types/pg": "^8.15.5",
+    "@typescript-eslint/eslint-plugin": "^8.38.0",
+    "@typescript-eslint/parser": "^8.38.0",
+    "eslint": "^9.32.0",
+    "nodemon": "^3.1.10",
+    "prettier": "^3.6.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}

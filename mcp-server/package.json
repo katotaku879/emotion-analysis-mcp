@@ -1,0 +1,28 @@
+{
+ "name": "emotion-analysis-mcp-server",
+ "version": "1.0.0",
+ "description": "MCP Server for Emotion Analysis and Happiness Prediction",
+ "main": "dist/server.js",
+ "type": "module",
+ "scripts": {
+   "build": "tsc",
+   "start": "node dist/server.js",
+   "dev": "tsx src/stdio-server-final.ts",
+   "watch": "tsc --watch",
+   "test": "node --test"
+ },
+ "keywords": ["mcp", "emotion-analysis", "claude", "ai"],
+ "author": "",
+ "license": "MIT",
+ "dependencies": {
+   "@modelcontextprotocol/sdk": "^0.4.0",
+   "pg": "^8.16.3",
+   "dotenv": "^17.2.1"
+ },
+ "devDependencies": {
+   "@types/node": "^24.1.0",
+   "@types/pg": "^8.15.5",
+   "typescript": "^5.8.3",
+   "tsx": "^4.7.0"
+ }
+}

@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Personal Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            width: 420px;
+            height: 520px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow: hidden;
+        }
+        
+        .container {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+        
+        /* ヘッダー */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .header .subtitle {
+            font-size: 11px;
+            opacity: 0.9;
+            margin-top: 2px;
+        }
+        
+        /* タブナビゲーション */
+        .tab-navigation {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+            padding: 0;
+        }
+        
+        .tab-button {
+            flex: 1;
+            padding: 12px 8px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            color: #6c757d;
+            transition: all 0.3s ease;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        
+        .tab-button:hover {
+            background: rgba(102, 126, 234, 0.05);
+            color: #495057;
+        }
+        
+        .tab-button.active {
+            color: #667eea;
+            background: white;
+        }
+        
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+        
+        .tab-icon {
+            font-size: 16px;
+        }
+        
+        /* タブコンテンツ */
+        .tab-content {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* カード */
+        .card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 12px;
+            border: 1px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+        
+        .card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #212529;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        /* ストレスメーター */
+        .stress-meter {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .stress-level-display {
+            text-align: center;
+            margin: 12px 0;
+        }
+        
+        .stress-score {
+            font-size: 42px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .stress-label {
+            font-size: 14px;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+        
+        .stress-bar {
+            width: 100%;
+            height: 24px;
+            background: #e9ecef;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .stress-bar-fill {
+            height: 100%;
+            transition: width 1s ease;
+            border-radius: 12px;
+        }
+        
+        .stress-bar-fill.low { background: linear-gradient(90deg, #28a745, #20c997); }
+        .stress-bar-fill.medium { background: linear-gradient(90deg, #ffc107, #fd7e14); }
+        .stress-bar-fill.high { background: linear-gradient(90deg, #dc3545, #e83e8c); }
+        .stress-bar-fill.critical { 
+            background: linear-gradient(90deg, #dc3545, #e83e8c); 
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+        
+        /* アコーディオン */
+        .accordion {
+            margin-bottom: 12px;
+        }
+        
+        .accordion-header {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 12px 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+        
+        .accordion-header:hover {
+            background: #f8f9fa;
+            border-color: #667eea;
+        }
+        
+        .accordion-header.active {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+            border-color: #667eea;
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+        
+        .accordion-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: #212529;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .accordion-icon {
+            color: #6c757d;
+            transition: transform 0.3s ease;
+            font-size: 12px;
+        }
+        
+        .accordion-header.active .accordion-icon {
+            transform: rotate(180deg);
+        }
+        
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            background: white;
+            border: 1px solid #667eea;
+            border-top: none;
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+        }
+        
+        .accordion-content.active {
+            max-height: 500px;
+        }
+        
+        .accordion-body {
+            padding: 16px;
+        }
+        
+        /* ストレストリガー */
+        .trigger-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-left: 3px solid;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            transition: transform 0.2s ease;
+        }
+        
+        .trigger-item:hover {
+            transform: translateX(4px);
+        }
+        
+        .trigger-item.severity-critical { 
+            border-left-color: #dc3545; 
+            background: linear-gradient(90deg, rgba(220, 53, 69, 0.1), transparent);
+        }
+        .trigger-item.severity-high { 
+            border-left-color: #fd7e14; 
+            background: linear-gradient(90deg, rgba(253, 126, 20, 0.1), transparent);
+        }
+        .trigger-item.severity-medium { 
+            border-left-color: #ffc107; 
+            background: linear-gradient(90deg, rgba(255, 193, 7, 0.1), transparent);
+        }
+        .trigger-item.severity-low { 
+            border-left-color: #28a745; 
+            background: linear-gradient(90deg, rgba(40, 167, 69, 0.1), transparent);
+        }
+        
+        .trigger-name {
+            font-weight: 500;
+            font-size: 14px;
+            color: #212529;
+        }
+        
+        .trigger-count {
+            background: #212529;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        /* 統計カード */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .stat-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 11px;
+            color: #6c757d;
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* 推奨アクション */
+        .recommendation-list {
+            padding: 0;
+            margin: 0;
+            list-style: none;
+        }
+        
+        .recommendation-item {
+            padding: 12px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            line-height: 1.5;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+        
+        .recommendation-urgent {
+            background: linear-gradient(135deg, rgba(220, 53, 69, 0.1), rgba(232, 62, 140, 0.1));
+            border-color: rgba(220, 53, 69, 0.3);
+            font-weight: 500;
+        }
+        
+        /* CTAボタン */
+        .cta-container {
+            padding: 16px;
+            background: white;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            gap: 8px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #495057;
+            border: 1px solid #dee2e6;
+        }
+        
+        .btn-secondary:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+        
+        /* ローディング */
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #6c757d;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* バッジ */
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            font-size: 10px;
+            font-weight: 600;
+            border-radius: 10px;
+            text-transform: uppercase;
+        }
+        
+        .badge-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .badge-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+        
+        .badge-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        /* スクロールバー */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- ヘッダー -->
+        <div class="header">
+            <h1>
+                <span>🎯</span>
+                Claude Personal Assistant
+            </h1>
+            <div class="subtitle">AI統合型転職支援システム</div>
+        </div>
+        
+        <!-- タブナビゲーション -->
+        <div class="tab-navigation">
+            <button class="tab-button active" data-tab="dashboard">
+                <span class="tab-icon">📊</span>
+                <span>ダッシュボード</span>
+            </button>
+            <button class="tab-button" data-tab="stress">
+                <span class="tab-icon">🎯</span>
+                <span>ストレス分析</span>
+            </button>
+            <button class="tab-button" data-tab="career">
+                <span class="tab-icon">💼</span>
+                <span>転職準備</span>
+            </button>
+        </div>
+        
+        <!-- タブコンテンツ -->
+        <div class="tab-contents">
+            <!-- ダッシュボードタブ -->
+            <div id="dashboard-tab" class="tab-content active">
+                <div class="stat-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="message-count">0</div>
+                        <div class="stat-label">メッセージ</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="session-count">0</div>
+                        <div class="stat-label">セッション</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stress-level-mini">-</div>
+                        <div class="stat-label">ストレス</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="emotion-state">😐</div>
+                        <div class="stat-label">感情状態</div>
+                    </div>
+                </div>
+                
+                <!-- リアルタイムアラート -->
+                <div class="card" id="alert-area">
+                    <div class="card-title">
+                        <span>🔔</span>
+                        リアルタイムアラート
+                    </div>
+                    <div id="alert-content">
+                        <p style="color: #6c757d; font-size: 13px;">現在アラートはありません</p>
+                    </div>
+                </div>
+                
+                <!-- クイックアクション -->
+                <div class="accordion">
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <div class="accordion-title">
+                            <span>⚡</span>
+                            クイックアクション
+                        </div>
+                        <span class="accordion-icon">▼</span>
+                    </div>
+                    <div class="accordion-content">
+                        <div class="accordion-body">
+                            <button class="btn btn-primary" style="width: 100%; margin-bottom: 8px;" onclick="quickAnalysis()">
+                                <span>📊</span>
+                                即座に分析実行
+                            </button>
+                            <button class="btn btn-secondary" style="width: 100%;" onclick="openSettings()">
+                                <span>⚙️</span>
+                                設定を開く
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ストレス分析タブ -->
+            <div id="stress-tab" class="tab-content">
+                <!-- ストレスメーター -->
+                <div class="stress-meter">
+                    <div class="card-title">全体的なストレスレベル</div>
+                    <div class="stress-level-display">
+                        <div class="stress-score" id="stress-score">--</div>
+                        <div class="stress-label" id="stress-label">分析中...</div>
+                    </div>
+                    <div class="stress-bar">
+                        <div class="stress-bar-fill" id="stress-bar-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+                
+                <!-- ストレス要因TOP5 -->
+                <div class="accordion">
+                    <div class="accordion-header active" onclick="toggleAccordion(this)">
+                        <div class="accordion-title">
+                            <span>📊</span>
+                            ストレス要因 TOP5
+                            <span class="badge badge-danger" id="critical-count">0</span>
+                        </div>
+                        <span class="accordion-icon">▼</span>
+                    </div>
+                    <div class="accordion-content active">
+                        <div class="accordion-body" id="stress-triggers">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                <p>分析中...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- トレンド分析 -->
+                <div class="accordion">
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <div class="accordion-title">
+                            <span>📈</span>
+                            トレンド分析
+                        </div>
+                        <span class="accordion-icon">▼</span>
+                    </div>
+                    <div class="accordion-content">
+                        <div class="accordion-body">
+                            <div class="stat-grid">
+                                <div class="stat-card">
+                                    <div class="stat-value" id="trend-this-week">0</div>
+                                    <div class="stat-label">今週</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value" id="trend-last-week">0</div>
+                                    <div class="stat-label">先週</div>
+                                </div>
+                            </div>
+                            <div id="trend-message" style="text-align: center; color: #6c757d; font-size: 13px;">
+                                変化率を計算中...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 推奨アクション -->
+                <div class="accordion">
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <div class="accordion-title">
+                            <span>💡</span>
+                            推奨アクション
+                        </div>
+                        <span class="accordion-icon">▼</span>
+                    </div>
+                    <div class="accordion-content">
+                        <div class="accordion-body">
+                            <ul class="recommendation-list" id="stress-recommendations">
+                                <li class="recommendation-item">データを取得中...</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 転職準備タブ -->
+            <div id="career-tab" class="tab-content">
+                <!-- 転職準備度スコア -->
+                <div class="stress-meter">
+                    <div class="card-title">転職準備度スコア</div>
+                    <div class="stress-level-display">
+                        <div class="stress-score" id="readiness-score">--</div>
+                        <div class="stress-label" id="readiness-label">計算中...</div>
+                    </div>
+                    <div class="stress-bar">
+                        <div class="stress-bar-fill low" id="readiness-bar-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+                
+                <!-- スキル棚卸し -->
+                <div class="accordion">
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <div class="accordion-title">
+                            <span>🛠️</span>
+                            スキル棚卸し
+                        </div>
+                        <span class="accordion-icon">▼</span>
+                    </div>
+                    <div class="accordion-content">
+                        <div class="accordion-body">
+                            <div id="skill-inventory">
+                                <p style="color: #6c757d; font-size: 13px;">次の機能で実装予定</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 市場価値診断 -->
+                <div class="accordion">
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <div class="accordion-title">
+                            <span>💰</span>
+                            市場価値診断
+                        </div>
+                        <span class="accordion-icon">▼</span>
+                    </div>
+                    <div class="accordion-content">
+                        <div class="accordion-body">
+                            <div id="market-value">
+                                <p style="color: #6c757d; font-size: 13px;">次の機能で実装予定</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 転職チェックリスト -->
+                <!-- 転職チェックリスト -->
+                <div class="accordion">
+                    <div class="accordion-header active" onclick="toggleAccordion(this)">
+                        <div class="accordion-title">
+                            <span>✅</span>
+                            転職チェックリスト
+                        </div>
+                        <span class="accordion-icon">▼</span>
+                    </div>
+                    <div class="accordion-content active">
+                        <div class="accordion-body">
+                            <div id="checklist-container">
+                                <!-- ここに動的に追加される -->
+                                <div style="text-align: center; padding: 20px; color: #999;">
+                                    読み込み中...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+        
+        <!-- CTAボタン（常に表示） -->
+        <div class="cta-container">
+            <button class="btn btn-primary" id="main-cta">
+                <span>🚀</span>
+                今すぐ分析
+            </button>
+            <button class="btn btn-secondary" id="secondary-cta">
+                <span>📊</span>
+                詳細
+            </button>
+        </div>
+    </div>
+    
+    <script src="popup.js"></script>
+   
+</body>
+</html>
