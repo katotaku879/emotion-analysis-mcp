@@ -15,6 +15,8 @@ import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import { analyzeStressTriggers } from './tools/analyzeStressTriggers.js';
 
+const filters = require('./filters');
+
 
 // 環境変数を読み込み
 dotenv.config();
@@ -333,48 +335,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'analyze_emotions':
         try {
-          const days = (args as any)?.days || 30;
+          const period = (args as any)?.period || '7 days';
+          const includeSystemMessages = (args as any)?.includeSystemMessages || false;
           
-          const emotionQuery = await pool.query(`
+          const emotionQuery = `
             SELECT 
-              emotion,
-              COUNT(*) as frequency,
-              AVG(score) as avg_score,
-              MIN(score) as min_score,
-              MAX(score) as max_score,
-              ROUND(AVG(score), 2) as rounded_avg
-            FROM emotions 
-            WHERE created_at >= NOW() - INTERVAL '${days} days'
-            GROUP BY emotion 
-            ORDER BY frequency DESC, avg_score DESC
-          `);
-
-          const timeQuery = await pool.query(`
-            SELECT 
-              DATE(created_at) as date,
-              AVG(score) as daily_avg,
-              COUNT(*) as daily_count
-            FROM emotions 
-            WHERE created_at >= NOW() - INTERVAL '${days} days'
-            GROUP BY DATE(created_at)
-            ORDER BY date DESC
-            LIMIT 7
-          `);
-
-          const emotions = emotionQuery.rows.map(row => 
-            `**${row.emotion}**: ${row.frequency}回 (平均: ${row.rounded_avg}/10)`
-          ).join('\n');
-
-          const dailyTrends = timeQuery.rows.map(row => 
-            `${row.date}: 平均${parseFloat(row.daily_avg).toFixed(1)}/10 (${row.daily_count}記録)`
-          ).join('\n');
-
+              cm.content,
+              cm.role,
+              cm.created_at
+            FROM conversation_messages cm
+            WHERE cm.created_at > NOW() - INTERVAL '${period}'
+            ORDER BY cm.created_at DESC
+          `;
+          
+          const emotionResult = await pool.query(emotionQuery);
+          let messages = emotionResult.rows;
+          const originalCount = messages.length;
+          
+          // フィルタリング適用
+          if (!includeSystemMessages) {
+            messages = filters.filterConversations(messages);
+            console.log(`🔍 Filtered: ${originalCount} → ${messages.length} messages`);
+          }
+          
+          // 感情分析
+          const emotionalTrends = filters.analyzeEmotionalTrends(messages);
+          const emotionalMessages = filters.extractEmotionalMessages(messages);
+          
+          // 統計情報
+          const stats = {
+            total_messages: originalCount,
+            filtered_messages: messages.length,
+            emotional_messages: emotionalMessages.length,
+            system_messages_removed: originalCount - messages.length,
+            filtering_accuracy: messages.length > 0
+              ? ((emotionalMessages.length / messages.length) * 100).toFixed(1)
+              : 0
+          };
+          
           return {
             content: [{
               type: 'text',
-              text: `📊 **感情分析結果 (過去${days}日間)**\n\n` +
-                    `**頻出感情**:\n${emotions}\n\n` +
-                    `**最近の日別トレンド**:\n${dailyTrends}`
+              text: `✅ 感情分析完了\n\n` +
+                    `期間: ${period}\n` +
+                    `総メッセージ: ${originalCount}件\n` +
+                    `システムメッセージ除外: ${originalCount - messages.length}件\n` +
+                    `感情関連メッセージ: ${emotionalMessages.length}件\n` +
+                    `分析精度: ${stats.filtering_accuracy}%\n` +
+                    `感情傾向: ポジティブ ${emotionalTrends.positive}件, ネガティブ ${emotionalTrends.negative}件`
             }]
           };
         } catch (error) {
@@ -385,7 +393,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }]
           };
         }
-
       case 'analyze_activity':
         try {
           const days = (args as any)?.days || 30;

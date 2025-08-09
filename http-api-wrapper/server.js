@@ -7,6 +7,7 @@ const { Pool } = pkg;
 
 // Personal AIルートをインポート
 import * as personalAI from './routes/personal-ai.js';
+import filters from '../mcp-server/src/filters.js';
 
 dotenv.config({ path: '../.env' });
 
@@ -68,8 +69,67 @@ app.get('/api/stats', async (req, res) => {
 app.post('/api/analyze', async (req, res) => {
   try {
     const { tool, parameters } = req.body;
-    console.log(`🔧 MCPツール呼び出し: ${tool}`);
+    console.log(`🔧 ツール呼び出し（直接実行）: ${tool}`);
     
+    // analyze_emotionsを直接実行
+    if (tool === 'analyze_emotions') {
+      const period = parameters?.period || '7 days';
+      const includeSystemMessages = parameters?.includeSystemMessages || false;
+      
+      const emotionQuery = `
+        SELECT 
+          cm.content,
+          cm.created_at
+        FROM conversation_messages cm
+        WHERE cm.created_at > NOW() - INTERVAL '${period}'
+        ORDER BY cm.created_at DESC
+      `;
+      
+      const emotionResult = await pool.query(emotionQuery);
+      let messages = emotionResult.rows;
+      const originalCount = messages.length;
+      
+      // フィルタリング適用
+      if (!includeSystemMessages) {
+        messages = filters.filterConversations(messages);
+        console.log(`🔍 Filtered: ${originalCount} → ${messages.length} messages`);
+      }
+      
+      // 感情分析
+      const emotionalTrends = filters.analyzeEmotionalTrends(messages);
+      const emotionalMessages = filters.extractEmotionalMessages(messages);
+      
+      // 統計情報
+      const stats = {
+        total_messages: originalCount,
+        filtered_messages: messages.length,
+        emotional_messages: emotionalMessages.length,
+        system_messages_removed: originalCount - messages.length,
+        filtering_accuracy: messages.length > 0
+          ? ((emotionalMessages.length / messages.length) * 100).toFixed(1)
+          : 0
+      };
+      
+      res.json({
+        success: true,
+        result: {
+          content: [{
+            type: 'text',
+            text: `✅ 感情分析完了\n\n` +
+                  `期間: ${period}\n` +
+                  `総メッセージ: ${originalCount}件\n` +
+                  `システムメッセージ除外: ${originalCount - messages.length}件\n` +
+                  `感情関連メッセージ: ${emotionalMessages.length}件\n` +
+                  `分析精度: ${stats.filtering_accuracy}%`
+          }],
+          stats,
+          emotional_trends: emotionalTrends
+        }
+      });
+      return;
+    }
+    
+    // 他のツールは従来通り
     const response = await fetch(`${MCP_SERVER_URL}/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -78,8 +138,9 @@ app.post('/api/analyze', async (req, res) => {
     
     const result = await response.json();
     res.json(result);
+    
   } catch (error) {
-    console.error('分析エラー:', error);
+    console.error('Analysis error:', error);
     res.status(500).json({ error: error.message });
   }
 });
