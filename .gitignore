@@ -190,3 +190,59 @@ __pycache__/
 # 3. Rotate all exposed credentials immediately
 # 4. Enable 2FA on all accounts
 # ================================================
+secrets/
+*.key
+*.pem
+*.crt
+
+# 🔐 セキュリティ関連（絶対NG）
+secrets/
+*.key
+*.pem
+*.crt
+.env
+.env.*
+!.env.example
+
+# 🔑 認証情報
+*password*
+*secret*
+*token*
+*credentials*
+
+# 📊 個人データ
+*.sql
+backup/
+backups/
+dumps/
+
+# 🐳 Docker関連
+docker-compose.override.yml
+.docker/
+
+# 📁 ログ・一時ファイル
+*.log
+logs/
+*.tmp
+temp/
+tmp/
+
+# 🗃️ データベース
+postgres_data/
+*.db
+
+# 💾 大容量ファイル
+*.tar
+*.gz
+*.zip
+node_modules/
+
+# 🔧 IDE設定
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 🖥️ OS関連
+.DS_Store
+Thumbs.db
