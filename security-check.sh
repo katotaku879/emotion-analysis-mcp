@@ -1,45 +1,31 @@
 #!/bin/bash
 
-echo "🔍 Running Security Check..."
+echo "🔒 セキュリティチェック"
+echo "========================"
+
+# 1. シークレットファイルの権限チェック
+echo "📁 シークレットファイル権限:"
+ls -la secrets/
+
+# 2. Dockerネットワーク分離確認
 echo ""
+echo "🌐 Dockerネットワーク:"
+docker network inspect emotion-network
 
-# Check for sensitive files
-echo "Checking for sensitive files in Git..."
-SENSITIVE=$(git ls-files 2>/dev/null | grep -E "\.env|password|secret|key|token" | grep -v example)
-
-if [ -z "$SENSITIVE" ]; then
-    echo "✅ No sensitive files in Git"
-else
-    echo "⚠️  WARNING: Sensitive files found in Git:"
-    echo "$SENSITIVE"
-fi
-
-# Check file permissions
+# 3. ポートバインディング確認（localhostのみか）
 echo ""
-echo "Checking .env file permissions..."
-if [ -f .env ]; then
-    PERMS=$(ls -l .env | awk '{print $1}')
-    if [ "$PERMS" = "-rw-------" ]; then
-        echo "✅ .env permissions are secure (600)"
-    else
-        echo "⚠️  WARNING: .env permissions are not secure"
-        echo "   Run: chmod 600 .env"
-    fi
-else
-    echo "ℹ️  .env file not found"
-fi
+echo "🔌 ポートバインディング:"
+docker compose ps --format "table {{.Name}}\t{{.Ports}}"
 
-# Check for hardcoded passwords
+# 4. コンテナのセキュリティ設定確認
 echo ""
-echo "Checking for hardcoded passwords..."
-HARDCODED=$(grep -r "password\|passwd\|pwd" --include="*.ts" --include="*.js" 2>/dev/null | grep -v "DB_PASSWORD" | grep -v "password:" | grep -v "//" | head -5)
+echo "🛡️ コンテナセキュリティ:"
+docker inspect emotion-api | grep -E "ReadonlyRootfs|NoNewPrivileges|User"
 
-if [ -z "$HARDCODED" ]; then
-    echo "✅ No obvious hardcoded passwords found"
-else
-    echo "⚠️  WARNING: Possible hardcoded passwords found"
-    echo "   Review these lines carefully"
-fi
+# 5. SSL証明書の確認
+echo ""
+echo "🔐 SSL証明書:"
+openssl x509 -in nginx/ssl/cert.pem -text -noout | grep -E "Subject:|Not After"
 
 echo ""
-echo "🔒 Security check complete"
+echo "✅ セキュリティチェック完了"

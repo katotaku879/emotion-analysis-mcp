@@ -1,0 +1,201 @@
+version: '3.8'
+
+services:
+  # PostgreSQLデータベース（セキュリティ強化）
+  postgres:
+    image: postgres:16-alpine
+    container_name: emotion-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER_FILE: /run/secrets/db_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_DB: emotion_analysis
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    ports:
+      - "127.0.0.1:5433:5432"  # localhostのみにバインド
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:rw
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - /dev/shm:/dev/shm:rw  # パフォーマンス向上
+    secrets:
+      - db_user
+      - db_password
+    networks:
+      - emotion-network
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp
+      - /run
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # APIサーバー（セキュリティ強化）
+  api-server:
+    build:
+      context: ./http-api-wrapper
+      dockerfile: Dockerfile.secure
+      args:
+        - NODE_ENV=production
+    container_name: emotion-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3000"  # localhostのみ
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_NAME: emotion_analysis
+      DB_PORT: 5432
+      API_PORT: 3000
+      # セキュリティヘッダー
+      HELMET_ENABLED: "true"
+      CORS_ORIGIN: "https://claude.ai"
+      RATE_LIMIT_WINDOW: 15
+      RATE_LIMIT_MAX: 100
+      # 暗号化設定
+      SESSION_SECRET_FILE: /run/secrets/session_secret
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+    secrets:
+      - db_user
+      - db_password
+      - session_secret
+      - jwt_secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./http-api-wrapper:/app:ro
+      - ./mcp-server:/mcp-server:ro
+      - app_logs:/var/log/app:rw
+    networks:
+      - emotion-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100M
+    user: "node:node"
+    command: ["node", "--max-old-space-size=512", "server.js"]
+
+  # PAサーバー（セキュリティ強化）
+  pa-server:
+    build:
+      context: ./http-api-wrapper
+      dockerfile: Dockerfile.secure
+      args:
+        - NODE_ENV=production
+    container_name: emotion-pa
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3334:3333"
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_NAME: emotion_analysis
+      DB_PORT: 5432
+      PA_PORT: 3333
+      HELMET_ENABLED: "true"
+      RATE_LIMIT_WINDOW: 15
+      RATE_LIMIT_MAX: 50
+    secrets:
+      - db_user
+      - db_password
+      - session_secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./http-api-wrapper:/app:ro
+      - ./mcp-server:/mcp-server:ro
+      - pa_logs:/var/log/pa:rw
+    networks:
+      - emotion-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100M
+    user: "node:node"
+    command: ["node", "--max-old-space-size=512", "pa-server.js"]
+    healthcheck:
+      test: ["CMD-SHELL", "API_PORT=3333 node healthcheck.js || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  nginx:
+    image: nginx:alpine
+    container_name: emotion-nginx
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx:rw
+    networks:
+      - emotion-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+    depends_on:
+      - api-server
+      - pa-server
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80 || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+networks:
+  emotion-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+volumes:
+  postgres_data:
+    driver: local
+  app_logs:
+    driver: local
+  pa_logs:
+    driver: local
+  nginx_logs:
+    driver: local
+
+secrets:
+  db_user:
+    file: ./secrets/db_user.txt
+  db_password:
+    file: ./secrets/db_password.txt
+  session_secret:
+    file: ./secrets/session_secret.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt

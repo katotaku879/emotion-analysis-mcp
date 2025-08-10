@@ -1,0 +1,49 @@
+# マルチステージビルド for セキュリティ
+FROM node:20-alpine AS builder
+
+# セキュリティアップデート
+RUN apk update && apk upgrade && apk add --no-cache \
+    dumb-init \
+    && rm -rf /var/cache/apk/*
+
+WORKDIR /build
+
+# 依存関係のみコピー（キャッシュ最適化）
+COPY package*.json ./
+RUN npm ci --only=production && npm cache clean --force
+
+# プロダクションステージ
+FROM node:20-alpine
+
+# セキュリティアップデート
+RUN apk update && apk upgrade && apk add --no-cache \
+    dumb-init \
+    && rm -rf /var/cache/apk/*
+
+# 非rootユーザー作成
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+WORKDIR /app
+
+# ビルドステージから依存関係をコピー
+COPY --from=builder --chown=nodejs:nodejs /build/node_modules ./node_modules
+COPY --chown=nodejs:nodejs . .
+
+# セキュリティ対策
+RUN chmod -R 550 /app && \
+    chmod -R 770 /tmp
+
+# ヘルスチェック
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD node healthcheck.js || exit 1
+
+# 非rootユーザーで実行
+USER nodejs
+
+# dumb-initでPID 1問題を解決
+ENTRYPOINT ["dumb-init", "--"]
+
+EXPOSE 3000 3333
+
+CMD ["node", "server-docker.js"]

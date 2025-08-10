@@ -209,6 +209,15 @@ app.use((err, req, res, next) => {
   });
 });
 
+// ヘルスチェックエンドポイント（最初の方に追加）
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'healthy', 
+        service: 'api-server',
+        timestamp: new Date().toISOString() 
+    });
+});
+
 // サーバー起動
 app.listen(PORT, () => {
   console.log('================================');

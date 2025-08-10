@@ -5,6 +5,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ヘルスチェックエンドポイント
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'healthy', 
+        service: 'pa-server',
+        timestamp: new Date().toISOString() 
+    });
+});
+
 const PORT = 3333;
 
 // PAサーバーのエンドポイント
