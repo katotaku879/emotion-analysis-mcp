@@ -190,3 +190,87 @@ Chrome拡張機能: 自動保存とダッシュボード表示
 セッション数: 22
 フィルタリング後の感情メッセージ: 3,290件
 
+## 🐳 Docker環境
+
+### セットアップ
+
+1. **環境変数の設定**
+```bash
+cp .env.example .env
+# .envファイルを編集
+
+2.シークレット生成
+./generate-secrets.sh
+SSL証明書生成
+
+bashmkdir -p nginx/ssl
+cd nginx/ssl
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout key.pem -out cert.pem \
+  -subj "/C=JP/ST=Tokyo/L=Tokyo/O=EmotionAnalysis/CN=localhost"
+cd ../..
+
+Docker起動
+
+bashdocker compose up -d
+使用方法
+環境切り替え
+bash./switch-env.sh
+# 1: 既存DB（本番）
+# 2: Docker DB（テスト）
+サービスURL
+
+API: http://localhost:3001
+PA: http://localhost:3334
+HTTPS: https://localhost
+
+ヘルスチェック
+bashdocker compose ps
+./security-check.sh
+
+#### Step 2: セットアップガイド作成
+
+```bash
+touch SETUP.md
+code SETUP.md
+markdown# セットアップガイド
+
+## 必要な環境
+- Docker
+- Docker Compose V2
+- Node.js 20+
+- PostgreSQL 16
+
+## クイックスタート
+
+```bash
+# リポジトリをクローン
+git clone https://github.com/katotaku879/emotion-analysis-mcp.git
+cd emotion-analysis-mcp
+
+# 依存関係インストール
+cd http-api-wrapper && npm install && cd ..
+cd mcp-server && npm install && cd ..
+
+# 環境設定
+cp .env.example .env
+./generate-secrets.sh
+
+# Docker起動
+docker compose up -d
+
+# 確認
+docker compose ps
+トラブルシューティング
+ポート競合
+bash# 既存サービス停止
+sudo systemctl stop postgresql
+ヘルスチェック失敗
+bashdocker compose logs api-server
+docker compose restart api-server
+
+#### Step 3: generate-secrets.sh を追加
+
+```bash
+# generate-secrets.shがまだGitに追加されていない場合
+git add generate-secrets.sh
