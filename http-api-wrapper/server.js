@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import fetch from 'node-fetch';
 import pkg from 'pg';
 const { Pool } = pkg;
+import fs from 'fs';
 
 // Personal AIルートをインポート
 import * as personalAI from './routes/personal-ai.js';
@@ -15,14 +16,42 @@ const app = express();
 const PORT = process.env.API_PORT || 3000;
 const MCP_SERVER_URL = 'http://localhost:3001';
 
-// データベース接続
-const pool = new Pool({
-  user: process.env.DB_USER || 'mkykr',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'emotion_analysis',
-  password: process.env.DB_PASSWORD,
-  port: parseInt(process.env.DB_PORT || '5432'),
-});
+// データベース接続設定（環境に応じて切り替え）
+function getDbConfig() {
+    // Docker環境でhost.docker.internalを使う場合
+    if (process.env.DB_HOST === 'host.docker.internal') {
+        return {
+            user: process.env.DB_USER || 'mkykr',
+            password: process.env.DB_PASSWORD || '',
+            host: 'host.docker.internal',
+            database: process.env.DB_NAME || 'emotion_analysis',
+            port: parseInt(process.env.DB_PORT || '5432'),
+        };
+    }
+    
+    // Docker Secrets使用の場合
+    // Docker Secrets使用の場合（環境変数DB_HOSTがpostgresの時）
+    if (process.env.DB_HOST === 'postgres' && fs.existsSync('/run/secrets/db_password')) {
+        return {
+            user: fs.readFileSync('/run/secrets/db_user', 'utf8').trim(),
+            password: fs.readFileSync('/run/secrets/db_password', 'utf8').trim(),
+            host: 'postgres',  // ← 明示的に'postgres'を指定
+            database: process.env.DB_NAME || 'emotion_analysis',
+            port: parseInt(process.env.DB_PORT || '5432'),
+        };
+    }
+    
+    // デフォルト
+    return {
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || '',
+        host: process.env.DB_HOST || 'localhost',
+        database: process.env.DB_NAME || 'emotion_analysis',
+        port: parseInt(process.env.DB_PORT || '5432'),
+    };
+}
+
+const pool = new Pool(getDbConfig());
 
 // ミドルウェア
 app.use(cors({ origin: true, credentials: true }));
@@ -63,6 +92,27 @@ app.get('/api/stats', async (req, res) => {
     console.error('統計エラー:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// ダッシュボード用エンドポイント（/api/statsの後に追加）
+app.get('/api/dashboard', async (req, res, next) => {
+    try {
+        const stats = await pool.query('SELECT COUNT(*) as messages FROM conversation_messages');
+        const sessions = await pool.query('SELECT COUNT(*) as sessions FROM conversation_sessions');
+        
+        res.json({
+            totalMessages: parseInt(stats.rows[0]?.messages || 0),
+            totalSessions: parseInt(sessions.rows[0]?.sessions || 0),
+            lastUpdate: new Date().toISOString(),
+            stressLevel: 50,
+            jobUrgency: 60,
+            recommendations: ["正常に動作しています"], 
+            status: 'success'
+        });
+    } catch (error) {
+        console.error('❌ Dashboard error:', error);
+        next(error);
+    }
 });
 
 // 汎用分析エンドポイント
@@ -218,6 +268,7 @@ app.get('/health', (req, res) => {
     });
 });
 
+
 // サーバー起動
 app.listen(PORT, () => {
   console.log('================================');
@@ -241,6 +292,32 @@ process.on('SIGINT', async () => {
   await pool.end();
   process.exit(0);
 });
+
+// ====================================
+// エラーハンドリング（export defaultの直前に追加）
+// ====================================
+
+// 404エラーハンドラー
+app.use((req, res, next) => {
+    console.log(`❌ 404 Not Found: ${req.method} ${req.path}`);
+    res.status(404).json({
+        error: 'Not Found',
+        message: `エンドポイント ${req.path} は存在しません`,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// グローバルエラーハンドラー
+app.use((err, req, res, next) => {
+    console.error('🔥 エラー発生:', err);
+    res.status(err.status || 500).json({
+        error: true,
+        message: err.message || 'Internal Server Error',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// この後に export default app; がある
 
 export default app;
 
@@ -350,25 +427,68 @@ app.post('/api/analyze-now', async (req, res) => {
 });
 
 // 統合ダッシュボードエンドポイント
-app.get('/api/dashboard', async (req, res) => {
-  console.log('📥', new Date().toISOString(), '- GET /api/dashboard');
-  
-  if (!analysisCache.lastUpdate) {
-    await performAnalysis();
-  }
-  
-  try {
-    const messageCount = await pool.query('SELECT COUNT(*) FROM conversation_messages');
-    const sessionCount = await pool.query('SELECT COUNT(DISTINCT session_id) FROM conversation_messages');
-    
-    res.json({
-      totalMessages: parseInt(messageCount.rows[0].count),
-      totalSessions: parseInt(sessionCount.rows[0].count),
-      ...analysisCache
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+// ダッシュボード用エンドポイント（修正版）
+app.get('/api/dashboard', async (req, res, next) => {
+    try {
+        console.log('📊 ダッシュボードデータ取得中...');
+        
+        // データベース接続確認
+        if (!pool) {
+            throw new Error('データベース接続が確立されていません');
+        }
+
+        // 総メッセージ数を取得
+        const messagesResult = await pool.query(
+            'SELECT COUNT(*) as count FROM conversation_messages'
+        );
+        
+        // セッション数を取得
+        const sessionsResult = await pool.query(
+            'SELECT COUNT(*) as count FROM conversation_sessions'
+        );
+        
+        // 最新更新日時を取得
+        const lastUpdateResult = await pool.query(
+            'SELECT MAX(created_at) as last_update FROM conversation_messages'
+        );
+
+        // ストレス分析（エラーハンドリング付き）
+        let stressLevel = 0;
+        let urgency = 0;
+        
+        try {
+            stressLevel = await analyzeStress();
+        } catch (stressError) {
+            console.error('⚠️ ストレス分析エラー（続行）:', stressError.message);
+            stressLevel = -1; // エラー時は-1
+        }
+
+        try {
+            urgency = await analyzeJobUrgency();
+        } catch (urgencyError) {
+            console.error('⚠️ 緊急度分析エラー（続行）:', urgencyError.message);
+            urgency = -1; // エラー時は-1
+        }
+
+        // レスポンス作成
+        const response = {
+            totalMessages: parseInt(messagesResult.rows[0].count),
+            totalSessions: parseInt(sessionsResult.rows[0].count),
+            lastUpdate: lastUpdateResult.rows[0].last_update,
+            stressLevel: stressLevel,
+            jobUrgency: urgency,
+            recommendations: generateRecommendations(stressLevel, urgency),
+            status: 'success',
+            timestamp: new Date().toISOString()
+        };
+
+        console.log('✅ ダッシュボードデータ送信完了');
+        res.json(response);
+        
+    } catch (error) {
+        console.error('❌ ダッシュボードエラー:', error);
+        next(error); // グローバルエラーハンドラーに渡す
+    }
 });
 
 // 5分ごとに自動実行

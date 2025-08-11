@@ -35,6 +35,53 @@ services:
       retries: 5
       start_period: 30s
 
+  existing-api:
+    build:
+      context: ./http-api-wrapper
+      dockerfile: Dockerfile.secure
+      args:
+        - NODE_ENV=production
+    container_name: emotion-existing-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"  # localhostのみ
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: production
+      # DB_HOST: postgres  ← この行を削除
+      DB_NAME: emotion_analysis
+      DB_PORT: 5432
+      API_PORT: 3000
+      HELMET_ENABLED: "true"
+      CORS_ORIGIN: "https://claude.ai"
+  
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./http-api-wrapper:/app:ro
+      - ./mcp-server:/mcp-server:ro
+      - existing_api_logs:/var/log/app:rw
+    networks:
+      - emotion-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100M
+    command: ["node", "--max-old-space-size=512", "server.js"]
+    healthcheck:
+      test: ["CMD-SHELL", "node healthcheck.js || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
   # APIサーバー（セキュリティ強化）
   api-server:
     build:
@@ -46,6 +93,8 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:3001:3000"  # localhostのみ
+    env_file:
+      - .env.docker
     environment:
       NODE_ENV: production
       DB_HOST: postgres
@@ -189,6 +238,8 @@ volumes:
     driver: local
   nginx_logs:
     driver: local
+  existing_api_logs:    # ← これを追加
+    driver: local  
 
 secrets:
   db_user:

@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     // PAサーバーからも取得
-    const paResponse = await fetch('http://localhost:3333/api/pa/stats');
+    const paResponse = await fetch('http://localhost:3334/api/pa/stats');
     const paData = await paResponse.json();
     
     // 【修正】より正確なストレスレベル計算
