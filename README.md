@@ -274,3 +274,133 @@ docker compose restart api-server
 ```bash
 # generate-secrets.shがまだGitに追加されていない場合
 git add generate-secrets.sh
+
+## 🚀 クイックスタート
+
+### 1. 環境構築（Docker使用）
+
+```bash
+# リポジトリをクローン
+git clone https://github.com/katotaku879/emotion-analysis-mcp.git
+cd emotion-analysis-mcp
+
+# 環境変数設定
+cp .env.example .env
+# .envを編集してDB_PASSWORD=your_passwordを設定
+
+# Docker起動（全サービス一括起動）
+docker compose up -d
+
+# 起動確認
+docker compose ps
+2. Chrome拡張機能のインストール
+
+Chrome で chrome://extensions/ を開く
+「開発者モード」を有効化
+「パッケージ化されていない拡張機能を読み込む」をクリック
+http-api-wrapper/claude-simple-extensionフォルダを選択
+
+3. 使用方法
+
+Claude.ai (https://claude.ai) を開く
+Chrome拡張機能アイコンをクリック
+自動保存が開始（5秒ごとに検知、5メッセージで保存）
+
+📊 主な機能
+✅ 実装済み機能
+
+Docker完全統合 - docker compose up -dで全サービス起動
+51,509件のメッセージ分析 - 既存データベースとの完全連携
+自動保存機能 - 5秒ごとの自動検知、5メッセージごとの自動保存
+リアルタイム更新 - 3秒ごとに統計情報を自動更新
+セキュリティ強化 - PostgreSQLパスワード認証、IP制限
+長期運用対応 - 既存DBを直接使用、データ一元管理
+
+📈 システム構成
+docker compose up -d
+        ↓
+┌──────────────────────────────┐
+│  existing-api (3000)         │ ← Chrome拡張機能用API
+│  emotion-pa (3334)           │ ← 分析機能
+│  postgres (5433)             │ ← Docker DB（オプション）
+│  nginx (80/443)              │ ← リバースプロキシ
+└──────────────────────────────┐
+        ↓
+┌──────────────────────────────┐
+│  既存PostgreSQL (5432)       │ ← メインDB（51,509件）
+└──────────────────────────────┘
+        ↓
+┌──────────────────────────────┐
+│  Chrome拡張機能              │
+│  ・自動保存                  │
+│  ・リアルタイム表示          │
+└──────────────────────────────┘
+🔧 トラブルシューティング
+PostgreSQL接続エラー
+bash# PostgreSQL設定確認
+sudo nano /etc/postgresql/16/main/postgresql.conf
+# listen_addresses = '*' を設定
+
+# 認証設定
+sudo nano /etc/postgresql/16/main/pg_hba.conf
+# mkykr用のmd5認証を追加
+
+# 再起動
+sudo systemctl restart postgresql@16-main
+Chrome拡張機能が動作しない
+
+デベロッパーツール（F12）でコンソールエラーを確認
+APIサーバーの起動確認: curl http://localhost:3000/api/dashboard
+拡張機能の再読み込み
+
+🛡️ セキュリティ設定
+
+PostgreSQLパスワード認証有効
+接続元IP制限（WSL2内部のみ）
+Docker Secrets使用（オプション）
+環境変数による設定管理
+
+📈 パフォーマンス
+
+起動時間: 約10秒
+メッセージ処理: 51,509件を即座に分析
+自動更新: 3秒ごと
+メモリ使用: 約500MB（全サービス合計）
+
+
+### Step 2: GitHubでIssuesを作成
+
+```bash
+# ブラウザでGitHubリポジトリを開く
+echo "https://github.com/katotaku879/emotion-analysis-mcp/issues"
+以下のIssuesを作成：
+Issue 1: 「🐛 emotion-apiコンテナが再起動を繰り返す」
+markdown## 問題
+emotion-api（ポート3001）が起動時にエラーで再起動を繰り返す
+
+## 現状
+- Chrome拡張機能には影響なし（existing-apiが動作）
+- 開発・テスト用なので優先度低
+
+## 解決案
+1. エラーログの詳細調査
+2. 不要なら docker-compose.yml から削除
+Issue 2: 「✨ WSL2のIP自動取得機能」
+markdown## 機能要望
+WSL2のIPアドレスが再起動のたびに変わるため、自動取得機能が欲しい
+
+## 実装案
+```bash
+# 起動スクリプトに追加
+WSL_IP=$(hostname -I | awk '{print $1}')
+sed -i "s/DB_HOST=.*/DB_HOST=$WSL_IP/" .env.docker
+
+#### Issue 3: 「📚 ドキュメント：動画チュートリアル作成」
+```markdown
+## 内容
+セットアップから使用方法までの動画チュートリアル
+
+## 項目
+- Docker環境構築
+- Chrome拡張機能インストール
+- 自動保存の動作確認
