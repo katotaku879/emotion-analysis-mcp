@@ -8,6 +8,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { testConnection } from './database/config.js';
 import { emotionQueries } from './database/queries.js';
+import { analyzeCauseTool } from './tools/analyze_cause.js';
 
 class EmotionAnalysisMCPServer {
   private server: Server;
@@ -66,6 +67,38 @@ class EmotionAnalysisMCPServer {
             },
           },
           {
+            name: 'analyze_cause',
+            description: '過去のデータから変化の原因を分析し、推定原因と改善提案を生成します',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                question: { 
+                  type: 'string',
+                  description: '分析したい質問（例：なぜ最近疲れやすいの？）'
+                },
+                timeframe: { 
+                  type: 'number',
+                  description: '分析期間（日数）',
+                  default: 30,
+                  minimum: 7,
+                  maximum: 365
+                },
+                useCache: {
+                  type: 'boolean',
+                  description: 'キャッシュを使用するか',
+                  default: true
+                },
+                securityLevel: {
+                  type: 'string',
+                  enum: ['low', 'medium', 'high'],
+                  description: 'セキュリティレベル',
+                  default: 'medium'
+                }
+              },
+              required: ['question']
+            }
+          },
+          {
             name: 'find_happiness_triggers',
             description: 'Discover activities that consistently bring high happiness',
             inputSchema: {
@@ -102,19 +135,15 @@ class EmotionAnalysisMCPServer {
           case 'find_happiness_triggers':
             return await this.handleHappinessTriggers(args as { min_intensity?: number });
 
+          case 'analyze_cause':
+            return await this.handleCauseAnalysis(args as any);
+
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Error executing ${name}: ${errorMessage}`,
-            },
-          ],
-        };
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        throw new Error(`Tool execution failed: ${errorMessage}`);
       }
     });
   }
@@ -264,6 +293,18 @@ ${triggerList}
     } catch (error) {
       throw new Error(`Failed to find happiness triggers: ${error}`);
     }
+  }
+
+  private async handleCauseAnalysis(args: any) {
+    const result = await analyzeCauseTool.handler(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result)
+        }
+      ]
+    };
   }
 
   private generateEmotionInsights(analysis: any): string {

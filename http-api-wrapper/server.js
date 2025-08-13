@@ -7,7 +7,7 @@ const { Pool } = pkg;
 import fs from 'fs';
 
 // Personal AIルートをインポート
-import * as personalAI from './routes/personal-ai.js';
+import personalAI from './routes/personal-ai.js';
 import filters from '../mcp-server/src/filters.js';
 
 dotenv.config({ path: '../.env' });
@@ -64,10 +64,7 @@ app.use((req, res, next) => {
 });
 
 // ======= Personal AI エンドポイント =======
-app.post('/api/personal-ai/analyze-cause', personalAI.analyzeCause);
-app.get('/api/personal-ai/self-profile', personalAI.getSelfProfile);
-app.get('/api/personal-ai/emotion-patterns', personalAI.getEmotionPatterns);
-app.get('/api/personal-ai/predictions', personalAI.getBehaviorPredictions);
+app.use('/api/personal-ai', personalAI.default || personalAI);
 
 // ======= 既存のエンドポイント =======
 
