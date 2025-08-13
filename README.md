@@ -404,3 +404,137 @@ sed -i "s/DB_HOST=.*/DB_HOST=$WSL_IP/" .env.docker
 - Docker環境構築
 - Chrome拡張機能インストール
 - 自動保存の動作確認
+
+# emotion-analysis-mcp
+
+AI支援による自己分析・転職支援統合システム
+
+## 🆕 原因分析API
+
+### 概要
+過去の会話データから変化の原因を分析し、確信度付きで提示するAPIです。
+
+### セットアップ
+
+#### 1. 環境変数の設定
+```bash
+cp .env.example .env
+
+# データベース設定
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=emotion_analysis
+DB_USER=your_username
+DB_PASSWORD=your_password
+
+# API設定
+API_KEY=your_secure_api_key_here
+NODE_ENV=development
+
+# MCPサーバー設定
+PORT=3001
+MCP_PORT=3001
+MCP_SERVER_URL=http://localhost:3001
+
+2. データベースセットアップ
+# テーブル作成
+sudo -u postgres psql -d emotion_analysis -f database/migrations/002_add_cause_analysis_tables.sql
+
+3. Docker起動
+# すべてのサービスを起動
+docker compose up -d
+
+# 状態確認
+docker compose ps
+
+使用方法
+基本的な使い方
+curl -X POST http://localhost:3000/api/personal-ai/analyze \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{
+    "type": "cause_analysis",
+    "message": "なぜ最近疲れやすいの？",
+    "timeframe": 30
+  }'
+
+  パラメータ
+パラメータ 型 必須説明
+type string ✅"cause_analysis" (固定値)
+message string ✅ 分析したい質問
+timeframe number ❌ 分析期間（日数）デフォルト: 30
+
+レスポンス例
+{
+  "success": true,
+  "type": "cause_analysis",
+  "result": {
+    "period": {
+      "start_date": "2025-07-13",
+      "end_date": "2025-08-12",
+      "days": 30
+    },
+    "data_points": 5000,
+    "confidence": 95,
+    "summary": "最も可能性の高い原因は「技術的な課題・開発作業の変化」です",
+    "findings": [
+      "技術的な課題・開発作業の変化（確信度: 95%）",
+      "学習活動・スキル習得の変化（確信度: 95%）"
+    ],
+    "recommendations": [
+      "継続的なデータ記録により、パターンの把握が可能になります",
+      "小さな改善から始めて、徐々に大きな変化を目指しましょう"
+    ]
+  }
+}
+
+使用例
+疲労の原因分析
+curl -X POST http://localhost:3000/api/personal-ai/analyze \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{"type":"cause_analysis","message":"なぜ疲れが取れないの？","timeframe":14}'
+
+ストレスの原因分析（過去7日）  
+curl -X POST http://localhost:3000/api/personal-ai/analyze \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{"type":"cause_analysis","message":"最近ストレスを感じる理由は？","timeframe":7}'
+
+トラブルシューティング  
+# カラムを追加
+sudo -u postgres psql -d emotion_analysis -c "ALTER TABLE analysis_cache ADD COLUMN IF NOT EXISTS query_hash VARCHAR(64);"
+
+エラー: Unauthorized
+
+.envファイルにAPI_KEYが設定されているか確認
+Dockerコンテナを再起動: docker compose restart existing-api
+
+エラー: Analysis failed
+
+データベース接続を確認
+ログを確認: docker compose logs existing-api --tail=50
+
+アーキテクチャ
+Claude.ai/ユーザー
+    ↓
+[HTTP API] localhost:3000/api/personal-ai/analyze
+    ↓
+[analyze_cause Tool] データ分析・原因特定
+    ↓
+[PostgreSQL] 7000件以上のメッセージデータ
+
+必要なサービス
+Dockerで以下のサービスが起動します：
+
+emotion-existing-api (ポート3000) - メインAPI
+emotion-postgres (ポート5433) - データベース
+emotion-pa (ポート3334) - 補助サービス
+emotion-nginx (ポート80/443) - リバースプロキシ
+
+セキュリティ
+
+APIキー認証必須
+環境変数で機密情報を管理
+HTTPSでの通信推奨（本番環境）
+
