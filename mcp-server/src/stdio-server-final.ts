@@ -33,10 +33,8 @@ const pool = new Pool({
 // サーバー初期化
 const server = new Server(
   {
-    name: 'emotion-analysis-mcp-server',
-    version: '1.0.0',
-  },
-  {
+    name: "emotion-analysis-mcp-server",
+    version: "1.0.0",
     capabilities: {
       tools: {},
     },
@@ -1838,7 +1836,7 @@ async function compareSpecificSessions(session1Id: string, session2Id: string, a
     comparison += `**📈 変化分析**\n`;
     comparison += `• メッセージ数変化: ${messageDiff}%\n`;
     comparison += `• 文字数変化: ${charDiff}%\n`;
-    comparison += `• 重要度変化: ${importanceDiff > 0 ? '+' : ''}${importanceDiff}\n\n`;
+    comparison += `• 重要度変化: ${Number(importanceDiff) > 0 ? '+' : ''}${importanceDiff}\n\n`;
     
     // コミュニケーションスタイル分析
     const session1Ratio = session1.user_messages / session1.claude_messages;

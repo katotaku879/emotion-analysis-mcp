@@ -45,13 +45,17 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"  # localhostのみ
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # ← 追加  
     env_file:
       - .env.docker
     environment:
       NODE_ENV: production
-      # DB_HOST: postgres  ← この行を削除
+      API_KEY: ${API_KEY}
+      DB_HOST: host.docker.internal
       DB_NAME: emotion_analysis
       DB_PORT: 5432
+      DB_USER: mkykr 
       API_PORT: 3000
       HELMET_ENABLED: "true"
       CORS_ORIGIN: "https://claude.ai"
