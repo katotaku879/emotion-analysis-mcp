@@ -246,3 +246,15 @@ node_modules/
 # 🖥️ OS関連
 .DS_Store
 Thumbs.db
+
+# Test files
+test-*.js
+test-*.html
+
+# Temporary files
+*.txt
+*@1.0.0
+tsc
+
+# Build artifacts
+*.log
