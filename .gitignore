@@ -258,3 +258,5 @@ tsc
 
 # Build artifacts
 *.log
+.env.docker
+*.backup
