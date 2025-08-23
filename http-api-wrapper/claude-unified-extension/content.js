@@ -35,12 +35,30 @@ function extractMessages() {
         processedMessages.add(messageId);
         
         // roleを判定
+        // roleを判定（より確実な方法）
+        // content.jsの37-41行目を以下に置き換え
         let role = 'user';
-        if (element.closest('[data-testid*="assistant"]') || 
-            element.innerHTML?.includes('Claude')) {
+
+        // Claude.aiの実際の構造に基づく判定
+        // ユーザーメッセージは通常右寄せ、Claudeは左寄せ
+        const elementRect = element.getBoundingClientRect();
+        const parentRect = element.parentElement?.getBoundingClientRect();
+
+        // 要素の位置で判定（左側がClaude、右側がユーザー）
+        if (elementRect && parentRect) {
+          const isLeftAligned = elementRect.left < (parentRect.width / 2);
+          if (isLeftAligned) {
+            role = 'assistant';
+          }
+        }
+
+        // または、メッセージの前後の要素で判定
+        const prevText = element.previousElementSibling?.textContent || '';
+        const nextText = element.nextElementSibling?.textContent || '';
+        if (prevText.includes('Claude') || nextText.includes('Claude')) {
           role = 'assistant';
         }
-        
+         // メッセージを保存       
         messages.push({
           content: content,
           role: role,

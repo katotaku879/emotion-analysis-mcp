@@ -8,7 +8,7 @@ let analyzeEmotionPatternsTool, analyzeSleepPatternsTool, analyzeFatiguePatterns
 try {
     analyzeEmotionPatternsTool = require('../mcp-server/dist/tools/analyze_emotion_patterns.js').analyzeEmotionPatternsTool;
     analyzeSleepPatternsTool = require('../mcp-server/dist/tools/analyze_sleep_patterns.js').analyzeSleepPatternsTool;
-    analyzeFatiguePatternsTool = require('../mcp-server/dist/tools/analyze_fatigue_patterns.js').analyzeFatiguePatternsTool;
+    analyzeFatiguePatternsTool = require('../app/tools/analyze_fatigue_patterns_fixed.js').analyzeFatiguePatternsTool;
     analyzeCognitivePatternsTool = require('../mcp-server/dist/tools/analyze_cognitive_patterns.js').analyzeCognitivePatternsTool;
     console.log('✅ All analysis tools loaded successfully');
 } catch (error) {
