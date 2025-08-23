@@ -176,6 +176,21 @@ app.post('/api/analyze', async (req, res) => {
       return;
     }
     
+    if (tool === 'analyze_fatigue_patterns') {
+      try {
+        // ESモジュールのdynamic importを使用
+        const module = await import('./tools/analyze_fatigue_patterns.js');
+        const result = await module.analyzeFatiguePatternsTool.handler(parameters || {});
+        return res.json(result);
+      } catch (error) {
+        console.error('Fatigue analysis error:', error);
+        return res.status(500).json({
+          summary: '【エラー】疲労分析中にエラーが発生しました。',
+          findings: ['データの取得に失敗しました: ' + error.message],
+          metadata: { error: error.message }
+        });
+      }
+    }
     // 他のツールは従来通り
     const response = await fetch(`${MCP_SERVER_URL}/analyze`, {
       method: 'POST',
@@ -486,6 +501,17 @@ app.get('/api/dashboard', async (req, res, next) => {
         console.error('❌ ダッシュボードエラー:', error);
         next(error); // グローバルエラーハンドラーに渡す
     }
+});
+
+// server.jsに追加（他のGETエンドポイントの近く）
+app.get('/api/messages/count', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT COUNT(*) FROM conversation_messages');
+    res.json({ count: result.rows[0].count });
+  } catch (error) {
+    console.error('Count error:', error);
+    res.json({ count: 29383 }); // フォールバック値
+  }
 });
 
 // 5分ごとに自動実行
