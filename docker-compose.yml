@@ -64,7 +64,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./http-api-wrapper:/app:ro
+      - ./http-api-wrapper:/app:rw
       - ./mcp-server:/mcp-server:ro
       - existing_api_logs:/var/log/app:rw
     networks:
@@ -75,9 +75,9 @@ services:
       - ALL
     cap_add:
       - NET_BIND_SERVICE
-    read_only: true
+    read_only: false
     tmpfs:
-      - /tmp:noexec,nosuid,size=100M
+      - /tmp:size=100M
     command: ["node", "--max-old-space-size=512", "server.js"]
     healthcheck:
       test: ["CMD-SHELL", "node healthcheck.js || exit 1"]
