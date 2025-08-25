@@ -26,6 +26,12 @@ const STRESS_KEYWORDS = {
   "辛い": -8.0,
   "きつい": -7.0,
   "しんどい": -7.5,
+  "だるい": -6.5,
+  "嫌だ": -6.0,
+  "怖い": -7.5,
+  "気持ち悪い": -8.5,
+  "出勤したくない": -8.0,
+  "家出たくない": -7.5,
   
   // 身体症状
   "眠れない": -8.0,
@@ -81,7 +87,7 @@ export async function analyzeStressTriggers(pool: Pool): Promise<{
             cm.content,
             unnest(ARRAY[${placeholders}]) as keyword
           FROM conversation_messages cm
-          WHERE cm.created_at > NOW() - INTERVAL '30 days'
+          WHERE cm.created_at > NOW() - INTERVAL '7 days'
             AND cm.role = 'user'
         ) t
         WHERE position(lower(keyword) in lower(content)) > 0
@@ -91,8 +97,8 @@ export async function analyzeStressTriggers(pool: Pool): Promise<{
           keyword,
           COUNT(*) as frequency,
           array_agg(DISTINCT LEFT(content, 100) ORDER BY created_at DESC LIMIT 3) as recent_examples,
-          COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as this_week_count,
-          COUNT(CASE WHEN created_at BETWEEN NOW() - INTERVAL '14 days' AND NOW() - INTERVAL '7 days' THEN 1 END) as last_week_count
+          COUNT(CASE WHEN created_at > NOW() - INTERVAL '2 days' THEN 1 END) as this_week_count,
+          COUNT(CASE WHEN created_at BETWEEN NOW() - INTERVAL '4 days' AND NOW() - INTERVAL '2 days' THEN 1 END) as last_week_count
         FROM keyword_occurrences
         GROUP BY keyword
       )

@@ -191,6 +191,62 @@ app.post('/api/analyze', async (req, res) => {
         });
       }
     }
+
+    // analyze_fatigue_patternsの後に追加（193行目あたり）
+    if (tool === 'analyze_stress_triggers') {
+      try {
+        console.log('🔧 analyze_stress_triggers を直接実行');
+        
+        // stdio-server-final.tsの実装をここに移植するか、
+        // または別ファイルから読み込む
+        const stressQuery = `
+          SELECT content, created_at 
+          FROM conversation_messages
+          WHERE created_at > NOW() - INTERVAL '7 days'
+            AND sender = 'user'
+            AND content NOT LIKE '%Failed to load resource%'
+            AND LENGTH(content) > 10
+          LIMIT 100
+        `;
+        
+        const result = await pool.query(stressQuery);
+        
+        // 簡易的なストレス計算
+        let stressLevel = 0;
+        const stressWords = ['疲れ', '辛い', '夜勤', 'ストレス', '限界'];
+        
+        result.rows.forEach(row => {
+          stressWords.forEach(word => {
+            if (row.content.includes(word)) {
+              stressLevel += 10;
+            }
+          });
+        });
+        
+        stressLevel = Math.min(100, stressLevel);
+        
+        return res.json({
+          success: true,
+          result: {
+            overall_stress_level: stressLevel,
+            top_triggers: [],
+            critical_keywords: [],
+            recommendations: [`ストレスレベル: ${stressLevel}%`],
+            trend_analysis: {
+              this_week: 0,
+              last_week: 0,
+              change_rate: 0
+            }
+          }
+        });
+        
+      } catch (error) {
+        console.error('Stress analysis error:', error);
+        return res.status(500).json({ error: error.message });
+      }
+    }
+
+
     // 他のツールは従来通り
     const response = await fetch(`${MCP_SERVER_URL}/analyze`, {
       method: 'POST',

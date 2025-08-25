@@ -1469,8 +1469,11 @@ case 'analyze_stress_triggers':
               cm.content,
               unnest($1::text[]) as keyword
             FROM conversation_messages cm
-            WHERE cm.created_at > NOW() - INTERVAL '30 days'
+            WHERE cm.created_at > NOW() - INTERVAL '7 days'
               AND cm.sender = 'user'
+              AND cm.content NOT LIKE '%Failed to load resource%'
+              AND cm.content NOT LIKE '%Internal Server Error%'
+              AND LENGTH(cm.content) > 10
           ) t
           WHERE position(lower(keyword) in lower(content)) > 0
           GROUP BY keyword
@@ -1481,7 +1484,7 @@ case 'analyze_stress_triggers':
             COUNT(CASE WHEN created_at BETWEEN NOW() - INTERVAL '14 days' AND NOW() - INTERVAL '7 days' THEN 1 END) as last_week,
             COUNT(*) as total_month
           FROM conversation_messages
-          WHERE created_at > NOW() - INTERVAL '30 days'
+          WHERE created_at > NOW() - INTERVAL '7 days'
             AND sender = 'user'
             AND (
               ${keywordsList.map((_, i) => `position(lower($${i + 2}) in lower(content)) > 0`).join(' OR ')}
