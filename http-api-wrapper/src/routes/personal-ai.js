@@ -1,6 +1,6 @@
 "use strict";
 // ==============================================
-// HTTP APIラッパー - 原因分析エンドポイント（拡張版）
+// HTTP APIラッパー - 原因分析エンドポイント
 // ==============================================
 // File: http-api-wrapper/src/routes/personal-ai.ts
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
@@ -41,15 +41,10 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 var express_1 = require("express");
-var analyze_cause_js_1 = require("../../mcp-server/src/tools/analyze_cause.js");
+var analyze_cause_js_1 = require("../../../mcp-server/src/tools/analyze_cause.js");
 var express_rate_limit_1 = require("express-rate-limit");
 var helmet_1 = require("helmet");
 var express_validator_1 = require("express-validator");
-
-// MCPクライアントの追加
-var MCPClient = require("../mcp-client.js").MCPClient;
-var mcpClient = new MCPClient();
-
 var router = express_1.Router();
 // セキュリティミドルウェア
 router.use((0, helmet_1.default)());
@@ -85,11 +80,6 @@ var analyzeValidation = [
         .optional()
         .isIn(['low', 'medium', 'high'])
         .withMessage('Invalid security level'),
-    // contextパラメータの検証を追加
-    (0, express_validator_1.body)('context')
-        .optional()
-        .isIn(['emotional', 'sleep', 'fatigue', 'cognitive', 'health', 'general'])
-        .withMessage('Invalid context'),
 ];
 // エラーハンドリングミドルウェア
 var asyncHandler = function (fn) { return function (req, res, next) {
@@ -110,9 +100,9 @@ var authenticateAPIKey = function (req, res, next) {
     }
     next();
 };
-// メインの分析エンドポイント（拡張版）
+// メインの分析エンドポイント
 router.post('/analyze', limiter, strictLimiter, authenticateAPIKey, analyzeValidation, asyncHandler(function (req, res) { return __awaiter(void 0, void 0, void 0, function () {
-    var errors, _a, type, message, timeframe, securityLevel, context, result, startTime, toolName, _b, formattedResult, error_1, errorMessage;
+    var errors, _a, type, message, timeframe, securityLevel, result, startTime, _b, formattedResult, error_1, errorMessage;
     return __generator(this, function (_c) {
         switch (_c.label) {
             case 0:
@@ -123,115 +113,65 @@ router.post('/analyze', limiter, strictLimiter, authenticateAPIKey, analyzeValid
                             details: errors.array()
                         })];
                 }
-                _a = req.body, type = _a.type, message = _a.message, timeframe = _a.timeframe, securityLevel = _a.securityLevel, context = _a.context;
+                _a = req.body, type = _a.type, message = _a.message, timeframe = _a.timeframe, securityLevel = _a.securityLevel;
                 _c.label = 1;
             case 1:
-                _c.trys.push([1, 14, , 15]);
+                _c.trys.push([1, 8, , 9]);
                 result = void 0;
                 startTime = Date.now();
-                toolName = void 0;
-                if (!context) return [3 /*break*/, 8];
-                // コンテキストベースの分析（新機能）
-                switch (context) {
-                    case 'emotional':
-                        toolName = 'analyze_emotion_patterns';
-                        break;
-                    case 'sleep':
-                        toolName = 'analyze_sleep_patterns';
-                        break;
-                    case 'fatigue':
-                        toolName = 'analyze_fatigue_patterns';
-                        break;
-                    case 'cognitive':
-                        toolName = 'analyze_cognitive_patterns';
-                        break;
-                    case 'health':
-                        toolName = 'analyze_fatigue_patterns'; // 暫定的にfatigueを使用
-                        break;
-                    default:
-                        toolName = 'analyze_cause';
-                }
-                console.log("📊 Using tool: ".concat(toolName, " for context: ").concat(context));
-                _c.label = 2;
-            case 2:
-                _c.trys.push([2, 4, , 6]);
-                return [4 /*yield*/, mcpClient.call(toolName, {
-                        timeframe: timeframe || 30,
-                        message: message,
-                        focus: context
-                    })];
-            case 3:
-                result = _c.sent();
-                console.log("✅ Analysis successful with ".concat(toolName));
-                return [3 /*break*/, 7];
-            case 4:
-                error_2 = _c.sent();
-                console.error("❌ Tool ".concat(toolName, " failed:"), error_2);
-                // フォールバック
-                return [4 /*yield*/, analyze_cause_js_1.analyzeCauseTool.handler({
-                        question: message,
-                        timeframe: timeframe || 30,
-                        useCache: true,
-                        securityLevel: securityLevel || 'medium'
-                    })];
-            case 5:
-                // フォールバック
-                result = _c.sent();
-                console.log("✅ Fallback to analyze_cause successful");
-                return [3 /*break*/, 7];
-            case 6: return [3 /*break*/, 7];
-            case 7: return [3 /*break*/, 13];
-            case 8:
                 _b = type;
                 switch (_b) {
-                    case 'cause_analysis': return [3 /*break*/, 9];
-                    case 'self_analysis': return [3 /*break*/, 11];
-                    case 'pattern_analysis': return [3 /*break*/, 12];
+                    case 'cause_analysis': return [3 /*break*/, 2];
+                    case 'self_analysis': return [3 /*break*/, 4];
+                    case 'pattern_analysis': return [3 /*break*/, 5];
                 }
-                return [3 /*break*/, 12];
-            case 9: return [4 /*yield*/, analyze_cause_js_1.analyzeCauseTool.handler({
+                return [3 /*break*/, 6];
+            case 2: return [4 /*yield*/, analyze_cause_js_1.analyzeCauseTool.handler({
                     question: message,
                     timeframe: timeframe || 30,
                     useCache: true,
                     securityLevel: securityLevel || 'medium'
                 })];
-            case 10:
+            case 3:
                 // 原因分析の実行
                 result = _c.sent();
-                return [3 /*break*/, 13];
-            case 11: 
+                return [3 /*break*/, 7];
+            case 4: 
             // 自己分析（未実装）
             return [2 /*return*/, res.status(501).json({
                     error: 'Not implemented',
                     message: 'Self analysis is coming soon'
                 })];
-            case 12: return [2 /*return*/, res.status(400).json({
+            case 5: 
+            // パターン分析（未実装）
+            return [2 /*return*/, res.status(501).json({
+                    error: 'Not implemented',
+                    message: 'Pattern analysis is coming soon'
+                })];
+            case 6: return [2 /*return*/, res.status(400).json({
                     error: 'Invalid analysis type',
                     message: "Unknown analysis type: ".concat(type)
                 })];
-            case 13:
-                formattedResult = formatResponseForClient(result, type, context);
+            case 7:
+                formattedResult = formatResponseForClient(result, type);
                 // レスポンスヘッダー設定
                 res.set({
                     'X-Processing-Time': "".concat(Date.now() - startTime, "ms"),
                     'X-Cache-Hit': result.cache_hit ? 'true' : 'false',
-                    'X-Analysis-Tool': toolName || 'analyze_cause',
                     'Cache-Control': 'private, max-age=3600'
                 });
                 res.json({
                     success: true,
-                    type: context || type,
+                    type: type,
                     result: formattedResult,
                     metadata: {
                         processing_time_ms: Date.now() - startTime,
                         cache_hit: result.cache_hit || false,
-                        analysis_tool: toolName || 'analyze_cause',
-                        context: context,
                         timestamp: new Date().toISOString()
                     }
                 });
-                return [3 /*break*/, 15];
-            case 14:
+                return [3 /*break*/, 9];
+            case 8:
                 error_1 = _c.sent();
                 console.error('Analysis error:', error_1);
                 errorMessage = process.env.NODE_ENV === 'development'
@@ -242,8 +182,8 @@ router.post('/analyze', limiter, strictLimiter, authenticateAPIKey, analyzeValid
                     message: errorMessage,
                     timestamp: new Date().toISOString()
                 });
-                return [3 /*break*/, 15];
-            case 15: return [2 /*return*/];
+                return [3 /*break*/, 9];
+            case 9: return [2 /*return*/];
         }
     });
 }); }));
@@ -256,13 +196,6 @@ router.get('/status', limiter, authenticateAPIKey, asyncHandler(function (req, r
                 server_running: true,
                 database_connected: true,
                 cache_enabled: true,
-                mcp_tools_available: [
-                    'analyze_cause',
-                    'analyze_emotion_patterns',
-                    'analyze_sleep_patterns',
-                    'analyze_fatigue_patterns',
-                    'analyze_cognitive_patterns'
-                ],
                 last_analysis: null,
                 uptime_seconds: 0
             };
@@ -272,7 +205,6 @@ router.get('/status', limiter, authenticateAPIKey, asyncHandler(function (req, r
                     server_running: status_1.server_running,
                     database_connected: status_1.database_connected,
                     cache_enabled: true,
-                    mcp_tools_available: status_1.mcp_tools_available,
                     last_analysis: status_1.last_analysis || null,
                     uptime_seconds: status_1.uptime_seconds || 0
                 },
@@ -352,37 +284,12 @@ router.get('/health', function (req, res) {
     res.json({
         status: 'healthy',
         service: 'personal-ai-api',
-        version: '2.0.0', // バージョンアップ
-        features: ['cause_analysis', 'emotion_analysis', 'sleep_analysis', 'fatigue_analysis', 'cognitive_analysis'],
         timestamp: new Date().toISOString()
     });
 });
-// レスポンス整形関数（拡張版）
-function formatResponseForClient(result, type, context) {
+// レスポンス整形関数
+function formatResponseForClient(result, type) {
     var now = new Date();
-    
-    // コンテキストベースの結果がある場合
-    if (context && result.summary) {
-        return {
-            period: result.metadata?.timeframe ? {
-                start_date: new Date(Date.now() - result.metadata.timeframe * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                end_date: now.toISOString().split('T')[0],
-                days: result.metadata.timeframe
-            } : {
-                start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                end_date: now.toISOString().split('T')[0],
-                days: 30
-            },
-            dataPoints: result.metadata?.dataPoints || result.data_points || 5000,
-            confidence: result.metadata?.confidence ? Math.round(result.metadata.confidence * 100) : 85,
-            summary: result.summary,
-            findings: result.findings || [],
-            recommendations: result.recommendations || [],
-            context_type: context
-        };
-    }
-    
-    // 従来のタイプベースの処理
     switch (type) {
         case 'cause_analysis':
             return {
@@ -391,7 +298,7 @@ function formatResponseForClient(result, type, context) {
                     end_date: now.toISOString().split('T')[0],
                     days: 30
                 },
-                dataPoints: result.data_points || 0,
+                data_points: result.data_points || 0,
                 confidence: Math.round((result.confidence_score || 0) * 100),
                 summary: generateSummary(result),
                 findings: formatFindings(result.probable_causes),
@@ -410,8 +317,8 @@ function generateSummary(result) {
     }
     var topCause = result.probable_causes[0];
     var confidence = Math.round(topCause.confidence * 100);
-    return "最も可能性の高い原因は「".concat(topCause.cause, "」です（確信度: ").concat(confidence, "%）。") +
-        "過去".concat(((_a = result.analysis_period) === null || _a === void 0 ? void 0 : _a.days) || 30, "日間の").concat(result.data_points || 5000, "件のデータから分析しました。");
+    return "\u6700\u3082\u53EF\u80FD\u6027\u306E\u9AD8\u3044\u539F\u56E0\u306F\u300C".concat(topCause.cause, "\u300D\u3067\u3059\uFF08\u78BA\u4FE1\u5EA6: ").concat(confidence, "%\uFF09\u3002") +
+        "\u904E\u53BB".concat(((_a = result.analysis_period) === null || _a === void 0 ? void 0 : _a.days) || 30, "\u65E5\u9593\u306E").concat(result.data_points, "\u4EF6\u306E\u30C7\u30FC\u30BF\u304B\u3089\u5206\u6790\u3057\u307E\u3057\u305F\u3002");
 }
 // 発見事項の整形
 function formatFindings(causes) {
@@ -419,7 +326,7 @@ function formatFindings(causes) {
         return ['分析に十分なデータがありません'];
     }
     return causes.slice(0, 3).map(function (cause) {
-        return "".concat(cause.cause, "（確信度: ").concat(Math.round(cause.confidence * 100), "%）");
+        return "".concat(cause.cause, "\uFF08\u78BA\u4FE1\u5EA6: ").concat(Math.round(cause.confidence * 100), "%\uFF09");
     });
 }
 // 証拠の整形

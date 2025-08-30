@@ -1,0 +1,30 @@
+import pkg from 'pg';
+const { Pool } = pkg;
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 複数の場所から.envを探す
+dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
+// デバッグ情報
+console.log('DB_USER:', process.env.DB_USER ? '設定済み' : '未設定');
+console.log('DB_PASSWORD:', process.env.DB_PASSWORD ? '設定済み' : '未設定');
+
+// 環境変数が設定されていない場合は警告のみ
+if (!process.env.DB_PASSWORD) {
+  console.warn('⚠️ DB_PASSWORD環境変数が設定されていません。デフォルト値を使用します。');
+}
+
+export const pool = new Pool({
+  user: process.env.DB_USER || 'mkykr',
+  host: process.env.DB_HOST || 'localhost',
+  database: process.env.DB_NAME || 'emotion_analysis',
+  password: process.env.DB_PASSWORD || '',  // 一時的に空文字を許可
+  port: parseInt(process.env.DB_PORT || '5432'),
+});

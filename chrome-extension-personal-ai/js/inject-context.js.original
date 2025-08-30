@@ -1,0 +1,277 @@
+// Personal AI Context Injector - 他の拡張機能と共存版
+console.log('🎯 AI Context Injector: 初期化開始');
+
+// 名前空間を作って競合を避ける
+window.PersonalAIContext = window.PersonalAIContext || {};
+
+(function() {
+    // 既に初期化済みなら終了
+    if (window.PersonalAIContext.initialized) {
+        console.log('✅ AI Context Injector: 既に初期化済み');
+        return;
+    }
+    
+    // コンテキスト追加関数
+    window.PersonalAIContext.add = function() {
+        console.log('📝 コンテキスト追加実行');
+        
+        const inputField = document.querySelector('div[contenteditable="true"]');
+        if (!inputField) {
+            console.error('❌ 入力欄が見つかりません');
+            return false;
+        }
+        
+        const originalText = inputField.textContent || '';
+        
+        const context = `【AI分析コンテキスト】
+━━━━━━━━━━━━━━━━━━━━━━
+📊 パーソナル分析結果:
+  • 性格特性: 開放性38%, 外向性48%, 神経症傾向37%
+  • ストレスレベル: 高（確信度70%）
+  • 活動パターン: 金曜21時に高頻度
+  • 予測: 転職検討可能性65%
+
+💡 このデータは34,000件の会話履歴から分析
+━━━━━━━━━━━━━━━━━━━━━━
+
+【元の質問】${originalText}
+
+※上記の分析結果を考慮してアドバイスをください。`;
+        
+        inputField.textContent = context;
+        console.log('✅ コンテキスト追加完了');
+        
+        // 通知を表示
+        window.PersonalAIContext.showNotification('コンテキストを追加しました');
+        return true;
+    };
+    
+    // API経由でリアルタイムデータを取得
+    window.PersonalAIContext.addWithAPI = async function() {
+        console.log('🔄 API経由でコンテキスト取得中...');
+        try {
+            const inputField = document.querySelector('div[contenteditable="true"]');
+            if (!inputField) {
+                console.error('入力フィールドが見つかりません');
+                return;
+            }
+            
+            const currentMessage = inputField.textContent || '';
+            
+            const response = await fetch('http://localhost:3000/api/personal-ai/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': 'hkjvh/LalSSa+DoC6S5MuzET25UqAjG43ohAEBojfjI='
+                },
+                body: JSON.stringify({
+                    type: 'cause_analysis',
+                    message: currentMessage,
+                    timeframe: 30
+                })
+            });
+            
+            if (!response.ok) throw new Error('API接続エラー');
+            
+            const data = await response.json();
+            console.log('📊 APIデータ取得成功:', data);
+            
+            // コンテキストを追加
+            const context = `\n\n【AI分析結果】\n${data.result.summary}\n\n主な発見：\n${data.result.findings.join('\n')}`;
+            inputField.textContent = currentMessage + context;
+            
+            window.PersonalAIContext.showNotification('✅ 分析完了！');
+            
+        } catch (error) {
+            console.error('❌ エラー:', error);
+            window.PersonalAIContext.showNotification('❌ 分析エラー: ' + error.message);
+        }
+    };
+    
+    // 通知表示（グローバルに使える）
+    window.PersonalAIContext.showNotification = function(message) {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            background: linear-gradient(135deg, #00b09b 0%, #96c93d 100%);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            z-index: 10001;
+            font-family: sans-serif;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            animation: slideIn 0.3s ease;
+        `;
+        notification.textContent = '✅ ' + message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    };
+    
+    // キーボードショートカット（Ctrl+Shift+P）
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+            e.preventDefault();
+            window.PersonalAIContext.add();
+        }
+    });
+    
+    // 初期化完了フラグ
+    window.PersonalAIContext.initialized = true;
+    
+    // インジケーター表示（他の拡張機能と重ならない位置）
+    const indicator = document.createElement('div');
+    indicator.style.cssText = `
+        position: fixed;
+        bottom: 60px;
+        right: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 8px 15px;
+        border-radius: 20px;
+        z-index: 10000;
+        font-family: sans-serif;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    `;
+    indicator.textContent = '🎯 AI Context';
+    indicator.onclick = window.PersonalAIContext.add;
+    indicator.title = 'クリックでコンテキスト追加 (Ctrl+Shift+P)';
+    document.body.appendChild(indicator);
+    
+    console.log('✅ AI Context Injector: 初期化完了');
+    console.log('💡 使い方:');
+    console.log('  - window.PersonalAIContext.add() でコンテキスト追加');
+    console.log('  - window.PersonalAIContext.addWithAPI() でAPI経由');
+    console.log('  - Ctrl+Shift+P でショートカット');
+    console.log('  - 右下のボタンをクリック');
+})();
+
+
+// ============================================
+// 自動原因分析機能
+// ============================================
+console.log('🔬 自動原因分析機能を初期化中...');
+
+// 原因分析が必要なパターン
+const causePatterns = [
+    /なぜ.*最近/,
+    /どうして.*最近/,
+    /最近.*理由/,
+    /最近.*原因/,
+    /why.*recently/i,
+    /最近.*疲れ/,
+    /最近.*つらい/,
+    /最近.*しんどい/
+];
+
+// 原因分析を実行する関数
+async function fetchCauseAnalysis(message) {
+    try {
+        const response = await fetch('http://localhost:3000/api/personal-ai/analyze', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': 'hkjvh/LalSSa+DoC6S5MuzET25UqAjG43ohAEBojfjI='
+            },
+            body: JSON.stringify({
+                type: 'cause_analysis',
+                message: message,
+                timeframe: 30
+            })
+        });
+        
+        if (!response.ok) throw new Error('API Error');
+        return await response.json();
+    } catch (error) {
+        console.error('原因分析エラー:', error);
+        return null;
+    }
+}
+
+// Enterキー監視（自動分析機能）
+let isProcessing = false;
+document.addEventListener('keydown', async function(e) {
+    // Enterキーが押された時
+    if (e.key === 'Enter' && !e.shiftKey && !isProcessing) {
+        const inputField = document.querySelector('div[contenteditable="true"]');
+        if (!inputField) return;
+        
+        const message = inputField.textContent || '';
+        
+        // 原因分析が必要か判定
+        const needsAnalysis = causePatterns.some(pattern => pattern.test(message));
+        
+        if (needsAnalysis) {
+            console.log('🔍 原因分析を自動実行中...');
+            e.preventDefault(); // 一旦送信を止める
+            e.stopPropagation();
+            
+            isProcessing = true;
+            
+            // 分析中の表示
+            window.PersonalAIContext.showNotification('🔄 原因を分析中...');
+            
+            // APIで分析
+            const analysis = await fetchCauseAnalysis(message);
+            
+            if (analysis && analysis.success) {
+                // 分析結果を追加
+                const context = `
+
+【AI原因分析結果】
+${analysis.result.summary}
+
+主な原因：
+${analysis.result.findings.slice(0, 3).join('\n')}
+
+推奨対策：
+${analysis.result.recommendations.slice(0, 2).join('\n')}`;
+                
+                inputField.textContent = message + context;
+                
+                window.PersonalAIContext.showNotification('✅ 分析完了！送信します');
+                
+                // 少し待ってから送信
+                setTimeout(() => {
+                    // Enterキーイベントを再発火
+                    const event = new KeyboardEvent('keydown', {
+                        key: 'Enter',
+                        code: 'Enter',
+                        keyCode: 13,
+                        which: 13,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    inputField.dispatchEvent(event);
+                    
+                    // さらにinputイベントも発火
+                    inputField.dispatchEvent(new Event('input', { bubbles: true }));
+                    
+                    isProcessing = false;
+                }, 500);
+            } else {
+                // 分析失敗時はそのまま送信
+                isProcessing = false;
+                const event = new KeyboardEvent('keydown', {
+                    key: 'Enter',
+                    code: 'Enter',
+                    keyCode: 13,
+                    which: 13,
+                    bubbles: true,
+                    cancelable: true
+                });
+                inputField.dispatchEvent(event);
+            }
+        }
+    }
+}, true); // captureフェーズで処理
+
+console.log('✨ 自動原因分析機能が有効になりました');

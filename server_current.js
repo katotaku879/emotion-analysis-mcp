@@ -178,219 +178,18 @@ app.post('/api/analyze', async (req, res) => {
     
     if (tool === 'analyze_fatigue_patterns') {
       try {
-        // ESモジュールのdynamic importを使用
-        const module = await import('./tools/analyze_fatigue_patterns.js');
-        const result = await module.analyzeFatiguePatternsTool.handler(parameters || {});
+        const { analyzeFatiguePatternsTool } = require('/tmp/analyze_fatigue_patterns.js');
+        const result = await analyzeFatiguePatternsTool.handler(parameters || {});
         return res.json(result);
       } catch (error) {
         console.error('Fatigue analysis error:', error);
         return res.status(500).json({
           summary: '【エラー】疲労分析中にエラーが発生しました。',
-          findings: ['データの取得に失敗しました: ' + error.message],
+          findings: ['データの取得に失敗しました'],
           metadata: { error: error.message }
         });
       }
     }
-
-    // analyze_fatigue_patternsの後に追加（193行目あたり）
-    if (tool === 'analyze_stress_triggers') {
-      try {
-        console.log('🔍 ストレス詳細分析開始...');
-        
-        // 7日間のメッセージを取得
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        
-        const stressQuery = `
-          SELECT content, created_at
-          FROM conversation_messages
-          WHERE created_at >= $1
-            AND sender = 'user'
-            AND content IS NOT NULL
-            AND LENGTH(TRIM(content)) > 3
-          ORDER BY created_at DESC
-        `;
-        
-        const stressResult = await pool.query(stressQuery, [sevenDaysAgo]);
-        const messages = stressResult.rows;
-        
-        console.log(`📊 7日間のメッセージ数: ${messages.length}件`);
-        
-        // 重み付きストレスキーワード（正確な配点）
-        const stressKeywords = {
-          // 最高危険度（30点）
-          '限界': 30,
-          '死にたい': 30,
-          '消えたい': 30,
-          
-          // 高危険度（25点）
-          '辞めたい': 25,
-          '気持ち悪い': 25,
-          '早く転職したい': 25,
-          
-          // 中危険度（20点）
-          '怖い': 20,
-          '夜勤': 20,
-          'トラブル': 20,
-          '出勤したくない': 20,
-          '家出たくない': 18,
-          
-          // 中程度（15点）
-          'だるい': 15,
-          '辛い': 15,
-          'ストレス': 15,
-          'イライラ': 15,
-          'ムカつく': 15,
-          '不安': 15,
-          'しんどい': 15,
-          
-          // 軽度（10点）
-          '疲れ': 10,
-          '痛い': 10,
-          '眠い': 8,
-          '忙しい': 5
-        };
-        
-        let totalScore = 0;
-        let detectedTriggers = [];
-        let keywordStats = {};
-        
-        // 各メッセージでキーワードを検出
-        messages.forEach((msg, index) => {
-          if (msg.content) {
-            Object.entries(stressKeywords).forEach(([keyword, weight]) => {
-              const regex = new RegExp(keyword, 'g');
-              const matches = (msg.content.match(regex) || []).length;
-              
-              if (matches > 0) {
-                const scoreContribution = matches * weight;
-                totalScore += scoreContribution;
-                
-                detectedTriggers.push({
-                  keyword,
-                  count: matches,
-                  weight,
-                  score: scoreContribution,
-                  date: msg.created_at,
-                  message_index: index
-                });
-                
-                // キーワード統計
-                if (!keywordStats[keyword]) {
-                  keywordStats[keyword] = { total_count: 0, total_score: 0, weight };
-                }
-                keywordStats[keyword].total_count += matches;
-                keywordStats[keyword].total_score += scoreContribution;
-                
-                console.log(`🔍 検出: "${keyword}" x${matches} = ${scoreContribution}点 (${msg.created_at.toISOString().split('T')[0]})`);
-              }
-            });
-          }
-        });
-        
-        // ストレスレベル計算（改良版）
-        const messageCount = messages.length;
-        let stressLevel = 0;
-        
-        if (messageCount > 0) {
-          // 方法1: 平均スコア基準
-          const averageScore = totalScore / messageCount;
-          const normalizedLevel1 = Math.min(100, Math.round(averageScore * 1.8));
-          
-          // 方法2: キーワード含有率基準
-          const stressMessageCount = detectedTriggers.length > 0 ? 
-            new Set(detectedTriggers.map(t => t.message_index)).size : 0;
-          const stressRatio = (stressMessageCount / messageCount) * 100;
-          const normalizedLevel2 = Math.min(100, Math.round(stressRatio * 1.2));
-          
-          // 2つの方法の重み付き平均
-          stressLevel = Math.round(normalizedLevel1 * 0.7 + normalizedLevel2 * 0.3);
-          
-          console.log(`📈 計算詳細:`);
-          console.log(`   総スコア: ${totalScore}点`);
-          console.log(`   メッセージ数: ${messageCount}件`);
-          console.log(`   平均スコア: ${averageScore.toFixed(2)}点`);
-          console.log(`   ストレスメッセージ数: ${stressMessageCount}件`);
-          console.log(`   ストレス含有率: ${stressRatio.toFixed(1)}%`);
-          console.log(`   最終ストレスレベル: ${stressLevel}%`);
-        }
-        
-        // トップトリガーを作成
-        const topTriggers = Object.entries(keywordStats)
-          .map(([keyword, stats]) => ({
-            trigger: keyword,
-            frequency: stats.total_count,
-            severity: stats.weight,
-            impact_score: stats.total_score
-          }))
-          .sort((a, b) => b.impact_score - a.impact_score)
-          .slice(0, 8);
-        
-        // 重要キーワード（20点以上）
-        const criticalKeywords = detectedTriggers
-          .filter(t => t.weight >= 20)
-          .map(t => ({
-            keyword: t.keyword,
-            severity: t.weight,
-            occurrences: t.count,
-            recent_date: t.date
-          }));
-        
-        // 推奨事項
-        const recommendations = [
-          `現在のストレスレベル: ${stressLevel}%`
-        ];
-        
-        if (stressLevel >= 80) {
-          recommendations.push('🚨 危険: 即座に休息が必要です');
-          recommendations.push('🏥 医療機関への相談を検討してください');
-          recommendations.push('🔄 転職活動を緊急に開始してください');
-        } else if (stressLevel >= 60) {
-          recommendations.push('⚠️ 注意: ストレス管理を強化してください');
-          recommendations.push('💤 十分な睡眠と休息を確保してください');
-          recommendations.push('🎯 転職準備を本格化してください');
-        } else if (stressLevel >= 40) {
-          recommendations.push('💡 改善: 定期的な休息を心がけてください');
-          recommendations.push('🧘 ストレス解消法を実践してください');
-        } else {
-          recommendations.push('✅ 良好: 現状を維持してください');
-        }
-        
-        console.log(`💡 最終ストレス分析結果: ${stressLevel}%`);
-        
-        return res.json({
-          success: true,
-          result: {
-            overall_stress_level: stressLevel,
-            top_triggers: topTriggers,
-            critical_keywords: criticalKeywords,
-            recommendations: recommendations,
-            trend_analysis: {
-              this_week: Math.round(totalScore),
-              message_count: messageCount,
-              average_score: (totalScore / Math.max(messageCount, 1)).toFixed(2),
-              stress_message_ratio: messageCount > 0 ? 
-                ((new Set(detectedTriggers.map(t => t.message_index)).size / messageCount) * 100).toFixed(1) + '%' : '0%'
-            },
-            analysis_period: '7日間',
-            calculation_method: '重み付きスコア + 含有率の複合計算'
-          }
-        });
-        
-      } catch (error) {
-        console.error('❌ ストレス分析エラー:', error);
-        return res.status(500).json({ 
-          success: false,
-          error: error.message,
-          result: {
-            overall_stress_level: 0,
-            recommendations: ['分析中にエラーが発生しました']
-          }
-        });
-      }
-    }
-
-
     // 他のツールは従来通り
     const response = await fetch(`${MCP_SERVER_URL}/analyze`, {
       method: 'POST',
@@ -701,17 +500,6 @@ app.get('/api/dashboard', async (req, res, next) => {
         console.error('❌ ダッシュボードエラー:', error);
         next(error); // グローバルエラーハンドラーに渡す
     }
-});
-
-// server.jsに追加（他のGETエンドポイントの近く）
-app.get('/api/messages/count', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT COUNT(*) FROM conversation_messages');
-    res.json({ count: result.rows[0].count });
-  } catch (error) {
-    console.error('Count error:', error);
-    res.json({ count: 29383 }); // フォールバック値
-  }
 });
 
 // 5分ごとに自動実行
