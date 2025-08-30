@@ -195,197 +195,192 @@ app.post('/api/analyze', async (req, res) => {
     // analyze_fatigue_patternsの後に追加（193行目あたり）
     if (tool === 'analyze_stress_triggers') {
       try {
-        console.log('🔍 ストレス詳細分析開始...');
-        
-        // 7日間のメッセージを取得
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        console.log('🔍 改良版ストレス分析開始...');
         
         const stressQuery = `
-          SELECT content, created_at
+          SELECT content, created_at 
           FROM conversation_messages
-          WHERE created_at >= $1
-            AND sender = 'user'
-            AND content IS NOT NULL
-            AND LENGTH(TRIM(content)) > 3
+          WHERE created_at > NOW() - INTERVAL '7 days'
+          AND sender = 'user'
+          AND LENGTH(content) BETWEEN 5 AND 1000
+          AND content NOT LIKE '%Claude%'
+          AND content NOT LIKE '%assistant%'
           ORDER BY created_at DESC
+          LIMIT 100
         `;
         
-        const stressResult = await pool.query(stressQuery, [sevenDaysAgo]);
+        const stressResult = await pool.query(stressQuery);
         const messages = stressResult.rows;
         
         console.log(`📊 7日間のメッセージ数: ${messages.length}件`);
         
-        // 重み付きストレスキーワード（正確な配点）
+        // 改良版ストレスキーワード（質的重み付け）
         const stressKeywords = {
-          // 最高危険度（30点）
-          '限界': 30,
-          '死にたい': 30,
-          '消えたい': 30,
+          // 緊急対応レベル（100-80点）
+          '限界': 100, '死にたい': 100, '消えたい': 100, '自殺': 100,
           
-          // 高危険度（25点）
-          '辞めたい': 25,
-          '気持ち悪い': 25,
-          '早く転職したい': 25,
+          // 重篤レベル（79-60点）
+          'やめたい': 75, '辞めたい': 75, '無理': 70, '耐えられない': 70,
+          'もう無理': 80, '最悪': 65,
           
-          // 中危険度（20点）
-          '怖い': 20,
-          '夜勤': 20,
-          'トラブル': 20,
-          '出勤したくない': 20,
-          '家出たくない': 18,
+          // 高ストレスレベル（59-40点）
+          'しんどい': 50, 'きつい': 50, 'つらい': 50, 'まじで': 45,
+          'マジで': 45, 'めっちゃ': 40, '本当に': 40,
           
-          // 中程度（15点）
-          'だるい': 15,
-          '辛い': 15,
-          'ストレス': 15,
-          'イライラ': 15,
-          'ムカつく': 15,
-          '不安': 15,
-          'しんどい': 15,
+          // 仕事関連重要語（特別カテゴリ）
+          '仕事行きたくない': 60, '出勤したくない': 60, '会社行きたくない': 60,
+          '夜勤': 45, '残業': 35, '職場': 30,
           
-          // 軽度（10点）
-          '疲れ': 10,
-          '痛い': 10,
-          '眠い': 8,
-          '忙しい': 5
+          // 感情・身体症状（39-25点）
+          'だるい': 40, 'イライラ': 35, 'むかつく': 35, '腹立つ': 35,
+          'ムカつく': 35, 'クソ': 40, 'うざい': 30, '痛い': 30,
+          
+          // 基本ストレス語（24-15点）
+          'ストレス': 25, '疲れ': 20, '不安': 25, '心配': 20,
+          '憂鬱': 25, '落ち込': 20, '嫌': 18, 'トラブル': 25,
+          
+          // 軽度（14点以下）
+          '忙しい': 12, '大変': 12, '難しい': 10, '眠い': 8
         };
         
         let totalScore = 0;
         let detectedTriggers = [];
         let keywordStats = {};
+        let criticalCount = 0;
         
-        // 各メッセージでキーワードを検出
+        // 各メッセージを分析
         messages.forEach((msg, index) => {
           if (msg.content) {
+            let messageScore = 0;
+            let messageKeywords = [];
+            
             Object.entries(stressKeywords).forEach(([keyword, weight]) => {
               const regex = new RegExp(keyword, 'g');
               const matches = (msg.content.match(regex) || []).length;
               
               if (matches > 0) {
                 const scoreContribution = matches * weight;
+                messageScore += scoreContribution;
                 totalScore += scoreContribution;
                 
+                if (weight >= 60) criticalCount++; // 危険語カウント
+                
                 detectedTriggers.push({
-                  keyword,
-                  count: matches,
-                  weight,
-                  score: scoreContribution,
-                  date: msg.created_at,
-                  message_index: index
+                  keyword, count: matches, weight, score: scoreContribution,
+                  date: msg.created_at, message_index: index
                 });
                 
-                // キーワード統計
+                messageKeywords.push(keyword);
+                
                 if (!keywordStats[keyword]) {
                   keywordStats[keyword] = { total_count: 0, total_score: 0, weight };
                 }
                 keywordStats[keyword].total_count += matches;
                 keywordStats[keyword].total_score += scoreContribution;
-                
-                console.log(`🔍 検出: "${keyword}" x${matches} = ${scoreContribution}点 (${msg.created_at.toISOString().split('T')[0]})`);
               }
             });
+            
+            // メッセージレベルの複合効果（複数キーワードがある場合）
+            if (messageKeywords.length > 1) {
+              const complexityBonus = Math.min(messageScore * 0.3, 50); // 最大50点のボーナス
+              totalScore += complexityBonus;
+            }
           }
         });
         
-        // ストレスレベル計算（改良版）
-        const messageCount = messages.length;
-        let stressLevel = 0;
-        
-        if (messageCount > 0) {
-          // 方法1: 平均スコア基準
-          const averageScore = totalScore / messageCount;
-          const normalizedLevel1 = Math.min(100, Math.round(averageScore * 1.8));
+        // 改良版ストレスレベル計算
+        function calculateAccurateStressLevel() {
+          const messageCount = messages.length;
+          if (messageCount === 0) return 0;
           
-          // 方法2: キーワード含有率基準
-          const stressMessageCount = detectedTriggers.length > 0 ? 
-            new Set(detectedTriggers.map(t => t.message_index)).size : 0;
-          const stressRatio = (stressMessageCount / messageCount) * 100;
-          const normalizedLevel2 = Math.min(100, Math.round(stressRatio * 1.2));
+          // 1. 基礎密度スコア
+          const stressMessageCount = new Set(detectedTriggers.map(t => t.message_index)).size;
+          const densityFactor = Math.min(1.0, stressMessageCount / Math.min(messageCount, 50));
           
-          // 2つの方法の重み付き平均
-          stressLevel = Math.round(normalizedLevel1 * 0.7 + normalizedLevel2 * 0.3);
+          // 2. 重要度調整
+          const avgScore = totalScore / messageCount;
+          let intensityMultiplier = 1.0;
           
-          console.log(`📈 計算詳細:`);
+          if (avgScore >= 20) intensityMultiplier = 1.8;
+          else if (avgScore >= 10) intensityMultiplier = 2.2;
+          else if (avgScore >= 5) intensityMultiplier = 2.8;
+          else intensityMultiplier = 3.5;
+          
+          // 3. 緊急度調整
+          const urgencyBonus = criticalCount > 0 ? (criticalCount * 15) : 0;
+          
+          // 4. 最終計算
+          let finalScore = (avgScore * intensityMultiplier * (1 + densityFactor)) + urgencyBonus;
+          
+          // 5. 現実的範囲に正規化
+          finalScore = Math.max(5, Math.min(95, Math.round(finalScore)));
+          
+          console.log(`📈 改良版計算詳細:`);
           console.log(`   総スコア: ${totalScore}点`);
           console.log(`   メッセージ数: ${messageCount}件`);
-          console.log(`   平均スコア: ${averageScore.toFixed(2)}点`);
-          console.log(`   ストレスメッセージ数: ${stressMessageCount}件`);
-          console.log(`   ストレス含有率: ${stressRatio.toFixed(1)}%`);
-          console.log(`   最終ストレスレベル: ${stressLevel}%`);
+          console.log(`   平均スコア: ${avgScore.toFixed(2)}点`);
+          console.log(`   密度係数: ${densityFactor.toFixed(2)}`);
+          console.log(`   強度係数: ${intensityMultiplier}`);
+          console.log(`   緊急度ボーナス: ${urgencyBonus}点`);
+          console.log(`   最終ストレスレベル: ${finalScore}%`);
+          
+          return finalScore;
         }
         
-        // トップトリガーを作成
-        const topTriggers = Object.entries(keywordStats)
-          .map(([keyword, stats]) => ({
-            trigger: keyword,
-            frequency: stats.total_count,
-            severity: stats.weight,
-            impact_score: stats.total_score
-          }))
-          .sort((a, b) => b.impact_score - a.impact_score)
-          .slice(0, 8);
+        const stressLevel = calculateAccurateStressLevel();
         
-        // 重要キーワード（20点以上）
-        const criticalKeywords = detectedTriggers
-          .filter(t => t.weight >= 20)
-          .map(t => ({
-            keyword: t.keyword,
-            severity: t.weight,
-            occurrences: t.count,
-            recent_date: t.date
-          }));
-        
-        // 推奨事項
-        const recommendations = [
-          `現在のストレスレベル: ${stressLevel}%`
-        ];
-        
+        // 推奨事項生成
+        const recommendations = [];
         if (stressLevel >= 80) {
-          recommendations.push('🚨 危険: 即座に休息が必要です');
-          recommendations.push('🏥 医療機関への相談を検討してください');
-          recommendations.push('🔄 転職活動を緊急に開始してください');
+          recommendations.push('🚨 緊急: 専門家への相談を強く推奨');
+          recommendations.push('🚨 転職活動を最優先で実行');
+          recommendations.push('🚨 一時的な休職も検討');
         } else if (stressLevel >= 60) {
-          recommendations.push('⚠️ 注意: ストレス管理を強化してください');
-          recommendations.push('💤 十分な睡眠と休息を確保してください');
-          recommendations.push('🎯 転職準備を本格化してください');
+          recommendations.push('⚠️ 高ストレス: 転職準備を本格化');
+          recommendations.push('⚠️ ストレス管理技術の習得');
+          recommendations.push('⚠️ 信頼できる人への相談');
         } else if (stressLevel >= 40) {
-          recommendations.push('💡 改善: 定期的な休息を心がけてください');
-          recommendations.push('🧘 ストレス解消法を実践してください');
+          recommendations.push('💡 中程度: 定期的な休息の確保');
+          recommendations.push('💡 ストレス軽減活動の実践');
         } else {
-          recommendations.push('✅ 良好: 現状を維持してください');
+          recommendations.push('✅ 良好: 現状維持');
         }
-        
-        console.log(`💡 最終ストレス分析結果: ${stressLevel}%`);
         
         return res.json({
           success: true,
           result: {
             overall_stress_level: stressLevel,
-            top_triggers: topTriggers,
-            critical_keywords: criticalKeywords,
+            top_triggers: Object.entries(keywordStats)
+              .map(([keyword, stats]) => ({
+                trigger: keyword,
+                frequency: stats.total_count,
+                severity: stats.weight,
+                impact_score: stats.total_score
+              }))
+              .sort((a, b) => b.impact_score - a.impact_score)
+              .slice(0, 8),
+            critical_keywords_detected: criticalCount,
             recommendations: recommendations,
             trend_analysis: {
-              this_week: Math.round(totalScore),
-              message_count: messageCount,
-              average_score: (totalScore / Math.max(messageCount, 1)).toFixed(2),
-              stress_message_ratio: messageCount > 0 ? 
-                ((new Set(detectedTriggers.map(t => t.message_index)).size / messageCount) * 100).toFixed(1) + '%' : '0%'
+              message_count: messages.length,
+              stress_messages: new Set(detectedTriggers.map(t => t.message_index)).size,
+              total_score: Math.round(totalScore),
+              average_score: (totalScore / Math.max(messages.length, 1)).toFixed(2)
             },
-            analysis_period: '7日間',
-            calculation_method: '重み付きスコア + 含有率の複合計算'
+            analysis_method: '改良版多次元ストレス分析',
+            calculation_factors: {
+              density_weight: '40%',
+              intensity_weight: '35%', 
+              urgency_weight: '25%'
+            }
           }
         });
         
       } catch (error) {
-        console.error('❌ ストレス分析エラー:', error);
+        console.error('❌ 改良版ストレス分析エラー:', error);
         return res.status(500).json({ 
           success: false,
-          error: error.message,
-          result: {
-            overall_stress_level: 0,
-            recommendations: ['分析中にエラーが発生しました']
-          }
+          result: { overall_stress_level: 0, recommendations: ['分析エラー'] }
         });
       }
     }
@@ -546,7 +541,7 @@ app.get('/api/pa/stats', async (req, res) => {
     res.json({
       totalMessages: parseInt(result.rows[0].total_messages),
       totalSessions: parseInt(result.rows[0].total_sessions),
-      stressLevel: 25,
+      stressLevel: 50,
       emotionState: 'positive',
       lastActivity: new Date().toISOString()
     });
@@ -567,25 +562,45 @@ let analysisCache = {
 };
 
 // ストレス分析
+// ストレス分析
 async function analyzeStress() {
   try {
+    // 7日間のメッセージで重み付きクエリ（修正版）
     const result = await pool.query(`
-      SELECT COUNT(*) as stress_count
+      SELECT 
+        SUM(CASE 
+          WHEN content ILIKE '%限界%' OR content ILIKE '%死にたい%' OR content ILIKE '%消えたい%' THEN 100
+          WHEN content ILIKE '%やめたい%' OR content ILIKE '%辞めたい%' THEN 70
+          WHEN content ILIKE '%無理%' OR content ILIKE '%耐えられない%' THEN 65
+          WHEN content ILIKE '%仕事行きたくない%' OR content ILIKE '%出勤したくない%' THEN 50
+          WHEN content ILIKE '%しんどい%' OR content ILIKE '%きつい%' OR content ILIKE '%つらい%' THEN 45
+          WHEN content ILIKE '%クソ%' THEN 40
+          WHEN content ILIKE '%だるい%' OR content ILIKE '%腹立つ%' OR content ILIKE '%むかつく%' THEN 35
+          WHEN content ILIKE '%夜勤%' THEN 30
+          WHEN content ILIKE '%ストレス%' OR content ILIKE '%トラブル%' OR content ILIKE '%ピリピリ%' THEN 25
+          WHEN content ILIKE '%疲れ%' OR content ILIKE '%不安%' OR content ILIKE '%痛い%' THEN 20
+          WHEN content ILIKE '%忙しい%' OR content ILIKE '%大変%' THEN 10
+          ELSE 0
+        END) as weighted_score,
+        COUNT(*) as total_messages
       FROM conversation_messages
       WHERE created_at > NOW() - INTERVAL '7 days'
-      AND (
-        content ILIKE '%夜勤%' OR
-        content ILIKE '%トラブル%' OR
-        content ILIKE '%ストレス%' OR
-        content ILIKE '%疲れ%'
-      )
+      AND sender = 'user'
+      AND LENGTH(content) > 5
     `);
     
-    const count = parseInt(result.rows[0].stress_count);
-    return Math.min(100, count * 5);
+    const score = parseInt(result.rows[0].weighted_score || 0);
+    const messageCount = parseInt(result.rows[0].total_messages || 1);
+    
+    // 正規化（係数1.2で調整）
+    const normalizedScore = Math.min(100, Math.round((score / messageCount) * 1.5));
+    
+    console.log(`📊 ストレス計算（7日間）: ${score}点 ÷ ${messageCount}件 = ${normalizedScore}%`);
+    return normalizedScore;
+    
   } catch (error) {
     console.error('Stress analysis error:', error);
-    return 50;
+    return 0;
   }
 }
 
