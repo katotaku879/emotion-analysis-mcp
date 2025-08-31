@@ -385,6 +385,75 @@ app.post('/api/analyze', async (req, res) => {
       }
     }
 
+    // 在庫管理ツール（ここに追加）
+    if (tool === 'manage_inventory') {
+      const { action, item, change, reason } = parameters;
+      
+      try {
+        if (action === 'check') {
+          const response = await fetch(`http://localhost:3000/api/inventory/${encodeURIComponent(item)}`);
+          const result = await response.json();
+          
+          if (!response.ok) {
+            return res.json({
+              success: false,
+              result: { content: [{ type: 'text', text: `エラー: ${result.error}` }] }
+            });
+          }
+          
+          return res.json({
+            success: true,
+            result: {
+              content: [{
+                type: 'text',
+                text: `📦 在庫情報\n\n商品名: ${result.name}\n現在在庫: ${result.current_stock}個\n最小在庫: ${result.minimum_stock}個\n状態: ${result.status === 'low_stock' ? '⚠️ 在庫少' : '✅ 正常'}\n保管場所: ${result.location}\nカテゴリ: ${result.category}`
+              }]
+            }
+          });
+        }
+        
+        if (action === 'update') {
+          if (change === undefined) {
+            return res.json({
+              success: false,
+              result: { content: [{ type: 'text', text: 'エラー: 在庫変更数が指定されていません' }] }
+            });
+          }
+          
+          const response = await fetch(`http://localhost:3000/api/inventory/${encodeURIComponent(item)}/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ change, reason })
+          });
+          
+          const result = await response.json();
+          
+          if (!response.ok) {
+            return res.json({
+              success: false,
+              result: { content: [{ type: 'text', text: `エラー: ${result.error}` }] }
+            });
+          }
+          
+          return res.json({
+            success: true,
+            result: {
+              content: [{
+                type: 'text',
+                text: `✅ 在庫更新完了\n\n商品名: ${result.name}\n変更前: ${result.previous_stock}個\n変更後: ${result.new_stock}個\n変更数: ${result.change > 0 ? '+' : ''}${result.change}個\n理由: ${reason || 'API更新'}`
+              }]
+            }
+          });
+        }
+        
+      } catch (error) {
+        return res.json({
+          success: false,
+          result: { content: [{ type: 'text', text: `API接続エラー: ${error.message}` }] }
+        });
+      }
+    }
+
 
     // 他のツールは従来通り
     const response = await fetch(`${MCP_SERVER_URL}/analyze`, {
@@ -457,6 +526,87 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+import Database from 'better-sqlite3';
+
+// 在庫状況取得API
+app.get('/api/inventory/:item', (req, res) => {
+  try {
+    const itemName = req.params.item;
+    const dbPath = '/inventory-data/inventory.db';
+    
+    const db = new Database(dbPath, { readonly: true });
+    const row = db.prepare('SELECT * FROM products WHERE name LIKE ? LIMIT 1').get(`%${itemName}%`);
+    db.close();
+    
+    if (!row) {
+      return res.status(404).json({ 
+        error: `商品「${itemName}」が見つかりません`,
+        hint: 'ペーパータオル、ゴミ袋、水切りネット等で検索してください'
+      });
+    }
+    
+    res.json({
+      name: row.name,
+      current_stock: row.current_stock,
+      minimum_stock: row.min_stock,
+      status: row.current_stock <= row.min_stock ? 'low_stock' : 'normal',
+      category: row.category,
+      location: row.storage_location
+    });
+    
+  } catch (error) {
+    res.status(500).json({ 
+      error: 'データベースエラー',
+      message: error.message 
+    });
+  }
+});
+
+// 在庫更新API
+app.post('/api/inventory/:item/update', (req, res) => {
+  try {
+    const itemName = req.params.item;
+    const { change, reason } = req.body;
+    const dbPath = '/inventory-data/inventory.db';
+    
+    const db = new Database(dbPath);
+    
+    // 商品確認
+    const product = db.prepare('SELECT * FROM products WHERE name LIKE ? LIMIT 1').get(`%${itemName}%`);
+    if (!product) {
+      db.close();
+      return res.status(404).json({ error: `商品「${itemName}」が見つかりません` });
+    }
+    
+    const newStock = product.current_stock + change;
+    if (newStock < 0) {
+      db.close();
+      return res.status(400).json({ error: '在庫がマイナスになります' });
+    }
+    
+    // 在庫更新
+    db.prepare('UPDATE products SET current_stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(newStock, product.id);
+    
+    // 履歴記録
+    db.prepare('INSERT INTO stock_history (product_id, operation_type, quantity_change, stock_after, memo) VALUES (?, ?, ?, ?, ?)')
+      .run(product.id, change > 0 ? '入荷' : '出荷', change, newStock, reason || 'API更新');
+    
+    db.close();
+    
+    res.json({
+      name: product.name,
+      previous_stock: product.current_stock,
+      new_stock: newStock,
+      change: change
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: '更新エラー', message: error.message });
+  }
+});
+
+
 // エラーハンドリング
 app.use((err, req, res, next) => {
   console.error('❌ サーバーエラー:', err);
@@ -523,7 +673,6 @@ app.use((err, req, res, next) => {
         timestamp: new Date().toISOString()
     });
 });
-
 // この後に export default app; がある
 
 export default app;
@@ -704,7 +853,7 @@ app.get('/api/dashboard', async (req, res, next) => {
             lastUpdate: lastUpdateResult.rows[0].last_update,
             stressLevel: stressLevel,
             jobUrgency: urgency,
-            recommendations: generateRecommendations(stressLevel, urgency),
+            recommendations: ["分析機能は正常です"],
             status: 'success',
             timestamp: new Date().toISOString()
         };

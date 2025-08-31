@@ -1,8 +1,8 @@
-// main-script.js - 質問別分析対応版
+// main-script.js - 質問別分析対応版 + 在庫管理統合
 (function() {
-    console.log('🎯 Personal AI 自動分析を初期化（質問別対応版）');
+    console.log('🎯 Personal AI 自動分析を初期化（質問別対応版 + 在庫管理）');
     
-    // パターン定義
+    // Personal AI分析のパターン定義
     const patterns = [
         /なぜ.*最近/,
         /どうして.*最近/,
@@ -45,6 +45,37 @@
         return 'general';
     }
     
+    // 在庫検出機能
+    function detectInventoryRequest(message) {
+        const inventoryTriggers = [
+            { pattern: /(.+)の在庫.*どれくらい/i, action: 'check' },
+            { pattern: /(.+)の在庫/i, action: 'check' },
+            { pattern: /(.+?)を?(\d+)個?使った/i, action: 'update', negative: true }, // (.+) を (.+?) に変更
+            { pattern: /(.+?)を?(\d+)個?使用/i, action: 'update', negative: true },  // (.+) を (.+?) に変更
+            { pattern: /(.+?)(\d+)個?減らし/i, action: 'update', negative: true },
+            { pattern: /(.+?)(\d+)個?追加/i, action: 'update', negative: false },
+            { pattern: /(.+?)(\d+)個?入荷/i, action: 'update', negative: false }
+        ];
+
+        for (const trigger of inventoryTriggers) {
+            const match = message.match(trigger.pattern);
+            if (match) {
+                const item = match[1]?.trim();
+                const quantity = match[2] ? parseInt(match[2]) : 1;
+                const change = trigger.action === 'update' ? 
+                    (trigger.negative ? -quantity : quantity) : undefined;
+                
+                return {
+                    item: item,
+                    action: trigger.action,
+                    change: change,
+                    reason: trigger.action === 'update' ? 'Chrome拡張機能による自動更新' : undefined
+                };
+            }
+        }
+        return null;
+    }
+    
     let inputTimer;
     let lastText = '';
     let processing = false;
@@ -64,6 +95,65 @@
             inputTimer = setTimeout(async () => {
                 if (processing || currentText === lastText) return;
                 
+                // 在庫検出を最優先でチェック
+                const inventoryRequest = detectInventoryRequest(currentText);
+                if (inventoryRequest) {
+                    processing = true;
+                    console.log('🏪 在庫リクエスト検出:', inventoryRequest);
+                    
+                    const notif = document.createElement('div');
+                    notif.style.cssText = 'position:fixed;top:20px;right:20px;background:#FF9800;color:white;padding:12px 24px;border-radius:8px;z-index:999999;';
+                    notif.textContent = '📦 在庫確認中...';
+                    document.body.appendChild(notif);
+                    
+                    try {
+                        const response = await fetch('http://localhost:3000/api/analyze', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                tool: 'manage_inventory',
+                                parameters: inventoryRequest
+                            })
+                        });
+                        
+                        const result = await response.json();
+                        if (result.success) {
+                            const inventoryInfo = result.result.content[0].text;
+                            
+                            this.focus();
+                            const selection = window.getSelection();
+                            const range = document.createRange();
+                            range.selectNodeContents(this);
+                            range.collapse(false);
+                            selection.removeAllRanges();
+                            selection.addRange(range);
+                            
+                            document.execCommand('insertText', false, '\n\n');
+                            document.execCommand('insertText', false, inventoryInfo);
+                            
+                            console.log('✅ 在庫情報をメッセージに追加');
+                            lastText = this.textContent;
+                            
+                            notif.textContent = '✅ 在庫情報追加完了';
+                            notif.style.background = '#4CAF50';
+                            setTimeout(() => notif.remove(), 2000);
+                        } else {
+                            notif.textContent = '❌ 在庫取得失敗';
+                            notif.style.background = '#f44336';
+                            setTimeout(() => notif.remove(), 2000);
+                        }
+                    } catch (error) {
+                        console.error('在庫取得エラー:', error);
+                        notif.textContent = '❌ 接続エラー';
+                        notif.style.background = '#f44336';
+                        setTimeout(() => notif.remove(), 2000);
+                    }
+                    
+                    processing = false;
+                    return; // Personal AI分析はスキップ
+                }
+                
+                // Personal AI分析の既存処理
                 const matchesPattern = patterns.some(p => p.test(currentText));
                 const hasAnalysis = currentText.includes('分析結果');
                 
@@ -104,7 +194,7 @@
                                 type: 'cause_analysis',
                                 message: analysisMessage,
                                 timeframe: 30,
-                                context: context  // コンテキストも送信
+                                context: context
                             })
                         });
                         
@@ -165,6 +255,9 @@
         }
     }, 2000);
     
+    // グローバル公開（デバッグ用）
+    window.detectInventoryRequest = detectInventoryRequest;
+    
     setupListener();
-    console.log('✅ Personal AI 自動分析が有効（質問別対応）');
+    console.log('✅ Personal AI 自動分析が有効（質問別対応 + 在庫管理統合）');
 })();
