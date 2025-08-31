@@ -48,13 +48,15 @@
     // 在庫検出機能
     function detectInventoryRequest(message) {
         const inventoryTriggers = [
-            { pattern: /(.+)の在庫.*どれくらい/i, action: 'check' },
-            { pattern: /(.+)の在庫/i, action: 'check' },
-            { pattern: /(.+?)を?(\d+)個?使った/i, action: 'update', negative: true }, // (.+) を (.+?) に変更
-            { pattern: /(.+?)を?(\d+)個?使用/i, action: 'update', negative: true },  // (.+) を (.+?) に変更
+            // 更新パターンを最優先
+            { pattern: /(.+?)を?(\d+)個?使った/i, action: 'update', negative: true },
+            { pattern: /(.+?)を?(\d+)個?使用/i, action: 'update', negative: true },
             { pattern: /(.+?)(\d+)個?減らし/i, action: 'update', negative: true },
             { pattern: /(.+?)(\d+)個?追加/i, action: 'update', negative: false },
-            { pattern: /(.+?)(\d+)個?入荷/i, action: 'update', negative: false }
+            { pattern: /(.+?)(\d+)個?入荷/i, action: 'update', negative: false },
+            // 照会パターンを後に（非貪欲に修正）
+            { pattern: /(.+?)の在庫.*どれくらい/i, action: 'check' },
+            { pattern: /(.+?)の在庫/i, action: 'check' }
         ];
 
         for (const trigger of inventoryTriggers) {
@@ -81,168 +83,179 @@
     let processing = false;
     
     function setupListener() {
-        const input = document.querySelector('.ProseMirror[contenteditable="true"]');
-        if (!input) {
-            setTimeout(setupListener, 1000);
-            return;
-        }
-        
-        input.addEventListener('input', function() {
-            const currentText = this.textContent || '';
-            
-            clearTimeout(inputTimer);
-            
-            inputTimer = setTimeout(async () => {
-                if (processing || currentText === lastText) return;
-                
-                // 在庫検出を最優先でチェック
-                const inventoryRequest = detectInventoryRequest(currentText);
-                if (inventoryRequest) {
-                    processing = true;
-                    console.log('🏪 在庫リクエスト検出:', inventoryRequest);
-                    
-                    const notif = document.createElement('div');
-                    notif.style.cssText = 'position:fixed;top:20px;right:20px;background:#FF9800;color:white;padding:12px 24px;border-radius:8px;z-index:999999;';
-                    notif.textContent = '📦 在庫確認中...';
-                    document.body.appendChild(notif);
-                    
-                    try {
-                        const response = await fetch('http://localhost:3000/api/analyze', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                tool: 'manage_inventory',
-                                parameters: inventoryRequest
-                            })
-                        });
-                        
-                        const result = await response.json();
-                        if (result.success) {
-                            const inventoryInfo = result.result.content[0].text;
-                            
-                            this.focus();
-                            const selection = window.getSelection();
-                            const range = document.createRange();
-                            range.selectNodeContents(this);
-                            range.collapse(false);
-                            selection.removeAllRanges();
-                            selection.addRange(range);
-                            
-                            document.execCommand('insertText', false, '\n\n');
-                            document.execCommand('insertText', false, inventoryInfo);
-                            
-                            console.log('✅ 在庫情報をメッセージに追加');
-                            lastText = this.textContent;
-                            
-                            notif.textContent = '✅ 在庫情報追加完了';
-                            notif.style.background = '#4CAF50';
-                            setTimeout(() => notif.remove(), 2000);
-                        } else {
-                            notif.textContent = '❌ 在庫取得失敗';
-                            notif.style.background = '#f44336';
-                            setTimeout(() => notif.remove(), 2000);
-                        }
-                    } catch (error) {
-                        console.error('在庫取得エラー:', error);
-                        notif.textContent = '❌ 接続エラー';
-                        notif.style.background = '#f44336';
-                        setTimeout(() => notif.remove(), 2000);
-                    }
-                    
-                    processing = false;
-                    return; // Personal AI分析はスキップ
-                }
-                
-                // Personal AI分析の既存処理
-                const matchesPattern = patterns.some(p => p.test(currentText));
-                const hasAnalysis = currentText.includes('分析結果');
-                
-                if (matchesPattern && !hasAnalysis) {
-                    processing = true;
-                    
-                    // 質問タイプを判定
-                    const context = getAnalysisContext(currentText);
-                    console.log('📊 分析を実行:', currentText);
-                    console.log('📋 分析タイプ:', context);
-                    
-                    const notif = document.createElement('div');
-                    notif.style.cssText = 'position:fixed;top:20px;right:20px;background:#2196F3;color:white;padding:12px 24px;border-radius:8px;z-index:999999;';
-                    notif.textContent = '🔄 分析中...';
-                    document.body.appendChild(notif);
-                    
-                    try {
-                        // コンテキストに応じたメッセージを送信
-                        const analysisMessage = context === 'emotional' ? 
-                            `${currentText} 感情やストレスの観点から分析してください` :
-                            context === 'sleep' ?
-                            `${currentText} 睡眠パターンの観点から分析してください` :
-                            context === 'cognitive' ?
-                            `${currentText} 集中力や認知機能の観点から分析してください` :
-                            context === 'fatigue' ?
-                            `${currentText} 疲労の種類（身体的/精神的）を特定して分析してください` :
-                            context === 'health' ?
-                            `${currentText} 健康状態全般の観点から分析してください` :
-                            currentText;
-                        
-                        const res = await fetch('http://localhost:3000/api/personal-ai/analyze', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-API-Key': 'hkjvh/LalSSa+DoC6S5MuzET25UqAjG43ohAEBojfjI='
-                            },
-                            body: JSON.stringify({
-                                type: 'cause_analysis',
-                                message: analysisMessage,
-                                timeframe: 30,
-                                context: context
-                            })
-                        });
-                        
-                        const data = await res.json();
-                        
-                        if (data.success) {
-                            this.focus();
-                            
-                            const selection = window.getSelection();
-                            const range = document.createRange();
-                            range.selectNodeContents(this);
-                            range.collapse(false);
-                            selection.removeAllRanges();
-                            selection.addRange(range);
-                            
-                            // コンテキストに応じた前置きを追加
-                            const prefix = context === 'emotional' ? '【感情分析結果】' :
-                                         context === 'sleep' ? '【睡眠分析結果】' :
-                                         context === 'cognitive' ? '【認知機能分析結果】' :
-                                         context === 'fatigue' ? '【疲労分析結果】' :
-                                         context === 'health' ? '【健康状態分析結果】' :
-                                         '【私のデータ分析結果】';
-                            
-                            document.execCommand('insertText', false, '\n\n');
-                            const result = `${prefix}\n${data.result.summary}\n主要因：${data.result.findings?.[0]}\n\nこの分析結果を踏まえて、具体的なアドバイスをください。`;
-                            document.execCommand('insertText', false, result);
-                            
-                            console.log('✅ 分析結果を追加');
-                            lastText = this.textContent;
-                            
-                            notif.textContent = '✅ 分析完了';
-                            notif.style.background = '#4CAF50';
-                            setTimeout(() => notif.remove(), 2000);
-                        }
-                    } catch (error) {
-                        console.error('エラー:', error);
-                        notif.textContent = '❌ エラー';
-                        notif.style.background = '#f44336';
-                        setTimeout(() => notif.remove(), 2000);
-                    }
-                    
-                    processing = false;
-                }
-            }, 1000);
-        });
-        
-        console.log('✅ イベントリスナー設定完了');
-    }
+   const input = document.querySelector('.ProseMirror[contenteditable="true"]');
+   if (!input) {
+       setTimeout(setupListener, 1000);
+       return;
+   }
+   
+   input.addEventListener('input', function() {
+       const currentText = this.textContent || '';
+       
+       clearTimeout(inputTimer);
+       
+       inputTimer = setTimeout(async () => {
+           if (processing || currentText === lastText) return;
+           
+           // 在庫検出を最優先でチェック
+           const inventoryRequest = detectInventoryRequest(currentText);
+           if (inventoryRequest) {
+               processing = true;
+               console.log('🏪 在庫リクエスト検出:', inventoryRequest);
+               
+               const notif = document.createElement('div');
+               notif.style.cssText = 'position:fixed;top:20px;right:20px;background:#FF9800;color:white;padding:12px 24px;border-radius:8px;z-index:999999;';
+               notif.textContent = '📦 在庫確認中...';
+               document.body.appendChild(notif);
+               
+               try {
+                   const response = await fetch('http://localhost:3000/api/analyze', {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify({
+                           tool: 'manage_inventory',
+                           parameters: inventoryRequest
+                       })
+                   });
+                   
+                   const result = await response.json();
+                   console.log('🔍 API応答結果:', result);
+                   if (result.success) {
+                       let displayMessage;
+                       
+                       // アクションに応じた表示メッセージを生成
+                       if (inventoryRequest.action === 'update') {
+                           const changeText = inventoryRequest.change > 0 ? '追加' : '使用';
+                           const absChange = Math.abs(inventoryRequest.change);
+                           displayMessage = `✅ ${inventoryRequest.item}を${absChange}個${changeText}しました\n更新が完了しました。`;
+                       } else {
+                           // 照会の場合は既存の処理
+                           displayMessage = result.result.content[0].text;
+                       }
+                       
+                       this.focus();
+                       const selection = window.getSelection();
+                       const range = document.createRange();
+                       range.selectNodeContents(this);
+                       range.collapse(false);
+                       selection.removeAllRanges();
+                       selection.addRange(range);
+                       
+                       document.execCommand('insertText', false, '\n\n');
+                       document.execCommand('insertText', false, displayMessage);
+                       
+                       console.log('✅ 在庫情報をメッセージに追加');
+                       lastText = this.textContent;
+                       
+                       notif.textContent = inventoryRequest.action === 'update' ? '✅ 在庫更新完了' : '✅ 在庫情報追加完了';
+                       notif.style.background = '#4CAF50';
+                       setTimeout(() => notif.remove(), 2000);
+                   } else {
+                       notif.textContent = '❌ 在庫取得失敗';
+                       notif.style.background = '#f44336';
+                       setTimeout(() => notif.remove(), 2000);
+                   }
+               } catch (error) {
+                   console.error('在庫取得エラー:', error);
+                   notif.textContent = '❌ 接続エラー';
+                   notif.style.background = '#f44336';
+                   setTimeout(() => notif.remove(), 2000);
+               }
+               
+               processing = false;
+               return; // Personal AI分析はスキップ
+           }
+           
+           // Personal AI分析の既存処理
+           const matchesPattern = patterns.some(p => p.test(currentText));
+           const hasAnalysis = currentText.includes('分析結果');
+           
+           if (matchesPattern && !hasAnalysis) {
+               processing = true;
+               
+               // 質問タイプを判定
+               const context = getAnalysisContext(currentText);
+               console.log('📊 分析を実行:', currentText);
+               console.log('📋 分析タイプ:', context);
+               
+               const notif = document.createElement('div');
+               notif.style.cssText = 'position:fixed;top:20px;right:20px;background:#2196F3;color:white;padding:12px 24px;border-radius:8px;z-index:999999;';
+               notif.textContent = '🔄 分析中...';
+               document.body.appendChild(notif);
+               
+               try {
+                   // コンテキストに応じたメッセージを送信
+                   const analysisMessage = context === 'emotional' ? 
+                       `${currentText} 感情やストレスの観点から分析してください` :
+                       context === 'sleep' ?
+                       `${currentText} 睡眠パターンの観点から分析してください` :
+                       context === 'cognitive' ?
+                       `${currentText} 集中力や認知機能の観点から分析してください` :
+                       context === 'fatigue' ?
+                       `${currentText} 疲労の種類（身体的/精神的）を特定して分析してください` :
+                       context === 'health' ?
+                       `${currentText} 健康状態全般の観点から分析してください` :
+                       currentText;
+                   
+                   const res = await fetch('http://localhost:3000/api/personal-ai/analyze', {
+                       method: 'POST',
+                       headers: {
+                           'Content-Type': 'application/json',
+                           'X-API-Key': 'hkjvh/LalSSa+DoC6S5MuzET25UqAjG43ohAEBojfjI='
+                       },
+                       body: JSON.stringify({
+                           type: 'cause_analysis',
+                           message: analysisMessage,
+                           timeframe: 30,
+                           context: context
+                       })
+                   });
+                   
+                   const data = await res.json();
+                   
+                   if (data.success) {
+                       this.focus();
+                       
+                       const selection = window.getSelection();
+                       const range = document.createRange();
+                       range.selectNodeContents(this);
+                       range.collapse(false);
+                       selection.removeAllRanges();
+                       selection.addRange(range);
+                       
+                       // コンテキストに応じた前置きを追加
+                       const prefix = context === 'emotional' ? '【感情分析結果】' :
+                                    context === 'sleep' ? '【睡眠分析結果】' :
+                                    context === 'cognitive' ? '【認知機能分析結果】' :
+                                    context === 'fatigue' ? '【疲労分析結果】' :
+                                    context === 'health' ? '【健康状態分析結果】' :
+                                    '【私のデータ分析結果】';
+                       
+                       document.execCommand('insertText', false, '\n\n');
+                       const result = `${prefix}\n${data.result.summary}\n主要因：${data.result.findings?.[0]}\n\nこの分析結果を踏まえて、具体的なアドバイスをください。`;
+                       document.execCommand('insertText', false, result);
+                       
+                       console.log('✅ 分析結果を追加');
+                       lastText = this.textContent;
+                       
+                       notif.textContent = '✅ 分析完了';
+                       notif.style.background = '#4CAF50';
+                       setTimeout(() => notif.remove(), 2000);
+                   }
+               } catch (error) {
+                   console.error('エラー:', error);
+                   notif.textContent = '❌ エラー';
+                   notif.style.background = '#f44336';
+                   setTimeout(() => notif.remove(), 2000);
+               }
+               
+               processing = false;
+           }
+       }, 1000);
+   });
+   
+   console.log('✅ イベントリスナー設定完了');
+}
     
     // インジケーター
     setTimeout(() => {

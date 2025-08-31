@@ -5,6 +5,7 @@ import fetch from 'node-fetch';
 import pkg from 'pg';
 const { Pool } = pkg;
 import fs from 'fs';
+import { exec } from 'child_process'; // ← この行を追加
 
 // Personal AIルートをインポート
 import personalAI from './routes/personal-ai.js';
@@ -434,6 +435,17 @@ app.post('/api/analyze', async (req, res) => {
               result: { content: [{ type: 'text', text: `エラー: ${result.error}` }] }
             });
           }
+        
+        if (tool === 'manage_inventory' && result.success) {
+          const syncCommand = 'cp /inventory-data/inventory.db "/mnt/c/Users/mkykr/Pythonプログラム/在庫管理アプリ/inventory_app/inventory.db"';
+          exec(syncCommand, (error) => {
+            if (error) {
+              console.log('Windows同期失敗:', error.message);
+            } else {
+              console.log('Windows側自動同期完了');
+            }
+          });
+        }
           
           return res.json({
             success: true,
